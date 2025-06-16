@@ -9,3 +9,5 @@ lerobot/
 *.tar.zst
 *.tar.zstd
 __pycache__/
+*.parquet
+piper_real_dataset/

@@ -120,8 +120,8 @@ class DataRecorder:
                     features={
                         # 摄像头
                         "observation.images.ee_cam":        {"shape": (3, 384, 384), "dtype": "image"},
-                        "observation.images.rgb_gemini2_0": {"shape": (3, 384, 384), "dtype": "image"},
-                        "observation.images.rgb_gemini2_1": {"shape": (3, 384, 384), "dtype": "image"},
+                        "observation.images.rgb_rs_0": {"shape": (3, 384, 384), "dtype": "image"},
+                        "observation.images.rgb_rs_1": {"shape": (3, 384, 384), "dtype": "image"},
                         # 关节 / 动作
                         "observation.state":  {"shape": (17,), "dtype": "float32"}, # 修改为observation.state
                         "actions": {"shape": (8,),  "dtype": "float32"},
@@ -211,8 +211,8 @@ class DataRecorder:
         frame = {
             # === 摄像头画面 ===
             "observation.images.ee_cam":        obs["policy"]["ee_camera"][0].cpu().numpy().astype(np.uint8),
-            "observation.images.rgb_gemini2_0": obs["policy"]["rgb_gemini2_0"][0].cpu().numpy().astype(np.uint8),
-            "observation.images.rgb_gemini2_1": obs["policy"]["rgb_gemini2_1"][0].cpu().numpy().astype(np.uint8),
+            "observation.images.rgb_rs_0": obs["policy"]["rgb_rs_0"][0].cpu().numpy().astype(np.uint8),
+            "observation.images.rgb_rs_1": obs["policy"]["rgb_rs_1"][0].cpu().numpy().astype(np.uint8),
             # === 关节状态 ===
             "observation.state": state_vec,  # 修改为observation.state
             # === 动作 ===
