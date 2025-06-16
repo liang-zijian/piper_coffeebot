@@ -1,0 +1,11 @@
+lerobot/
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.lzma
+*.tar.lz
+*.tar.lz4
+*.tar.zst
+*.tar.zstd
+__pycache__/

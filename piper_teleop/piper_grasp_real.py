@@ -42,7 +42,7 @@ def main():
     cam_2 = scene.add_camera(res=(1280, 960), pos=(0.5, 1.0, 1.5), lookat=(0.5, 0.5, 0.0), fov=55, GUI=False)
 
     # 加载 Piper 机器人
-    piper_robot = scene.add_entity(gs.morphs.MJCF(file="/home/ubuntu/workspace/piper_ws/agilex_piper/piper.xml"))
+    piper_robot = scene.add_entity(gs.morphs.MJCF(file="/home/ubuntu/workspace/piper_ws/piper_teleop/agilex_piper/piper.xml"))
 
     ########################## 构建场景 ##########################
     scene.build()
