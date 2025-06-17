@@ -495,6 +495,23 @@ class PiperRealDataRecorder:
                     logger.warning(f"动作数据无效 (类型: {type(actions)}, 长度: {len(actions) if actions is not None else 0})")
                 return False
             
+            # ------- 同步夹爪状态到 robot_state 与 actions -------
+            try:
+                if self.piper_controller is not None:
+                    gripper_open = not self.piper_controller.is_grasp  # True 表示张开
+                    open_val = np.int32(1 if gripper_open else 0)
+
+                    # 为了安全，先复制一份再修改，避免意外共享引用
+                    actions = actions.copy()
+                    robot_state = robot_state.copy()
+
+                    actions[-2:] = open_val
+                    robot_state[-2:] = open_val
+            except Exception as grip_e:
+                if self.frame_count % 50 == 0:
+                    logger.warning(f"更新夹爪开合状态失败: {grip_e}")
+            # ------- END -------
+
             # 所有数据验证通过，添加帧到数据集
             try:
                 success = self.dataset_manager.add_frame(
