@@ -215,7 +215,7 @@ class LeRobotDatasetManager:
         self.episode_robot_states = []
         self.episode_actions = []
         self.episode_tasks = []
-        logger.info(f"开始录制 episode {self.episode_idx}")
+        logger.info(f"Start episode {self.episode_idx}")
         return True
     
     def add_frame(self, 

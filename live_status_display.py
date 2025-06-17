@@ -107,8 +107,8 @@ class LiveStatusDisplay:
         runtime = time.time() - self.status_data["system"]["start_time"]
         runtime_str = f"{int(runtime//3600):02d}:{int((runtime%3600)//60):02d}:{int(runtime%60):02d}"
         
-        title_text = Text("Piper 机械臂实时数据录制系统", style="bold cyan")
-        subtitle_text = Text(f"运行时间: {runtime_str} | 当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 
+        title_text = Text("Piper Real-time Data Recorder", style="bold cyan")
+        subtitle_text = Text(f"Runtime: {runtime_str} | Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 
                            style="dim")
         
         return Panel(
@@ -120,30 +120,30 @@ class LiveStatusDisplay:
     def create_system_status(self) -> Panel:
         """创建系统状态面板"""
         table = Table(show_header=False, box=None, padding=(0, 1))
-        table.add_column("项目", style="cyan")
-        table.add_column("状态")
+        table.add_column("Item", style="cyan")
+        table.add_column("Status")
         
         # 录制状态
-        recording_status = "🔴 录制中" if self.status_data["system"]["is_recording"] else "⭕ 待机"
+        recording_status = "🔴 Recording" if self.status_data["system"]["is_recording"] else "⭕ Idle"
         recording_style = "red" if self.status_data["system"]["is_recording"] else "yellow"
         
-        table.add_row("录制状态", Text(recording_status, style=recording_style))
-        table.add_row("系统FPS", f"{self.status_data['system']['fps']:.1f}")
-        table.add_row("总帧数", f"{self.status_data['system']['frame_count']}")
-        table.add_row("Episode数", f"{self.status_data['system']['episode_count']}")
-        table.add_row("当前Episode帧数", f"{self.status_data['system']['current_episode_frames']}")
+        table.add_row("Recording Status", Text(recording_status, style=recording_style))
+        table.add_row("System FPS", f"{self.status_data['system']['fps']:.1f}")
+        table.add_row("Total Frames", f"{self.status_data['system']['frame_count']}")
+        table.add_row("Total Episodes", f"{self.status_data['system']['episode_count']}")
+        table.add_row("Current Episode Frames", f"{self.status_data['system']['current_episode_frames']}")
         
-        return Panel(table, title="[bold green]系统状态", border_style="green")
+        return Panel(table, title="[bold green]System Status", border_style="green")
     
     def create_robot_status(self) -> Panel:
         """创建机械臂状态面板"""
         table = Table(show_header=False, box=None, padding=(0, 1))
-        table.add_column("关节", style="cyan")
-        table.add_column("位置", style="white")
-        table.add_column("速度", style="yellow")
+        table.add_column("Joint", style="cyan")
+        table.add_column("Position", style="white")
+        #table.add_column("Velocity", style="yellow")
         
         # 连接状态
-        connection_status = "✅ 已连接" if self.status_data["robot"]["connected"] else "❌ 未连接"
+        connection_status = "✅ Connected" if self.status_data["robot"]["connected"] else "❌ Disconnected"
         connection_style = "green" if self.status_data["robot"]["connected"] else "red"
         
         for i in range(6):  # 显示前6个关节
@@ -153,49 +153,49 @@ class LiveStatusDisplay:
                 table.add_row(f"Joint{i+1}", f"{pos:7.3f}", f"{vel:7.3f}")
         
         # 夹爪状态
-        gripper_status = "🖐️ 张开" if self.status_data["robot"]["gripper_open"] else "✊ 闭合"
-        table.add_row("夹爪", gripper_status, "")
+        gripper_status = "🖐️ Open" if self.status_data["robot"]["gripper_open"] else "✊ Close"
+        table.add_row("Gripper", gripper_status, "")
         
-        title = f"[bold blue]机械臂状态 ({Text(connection_status, style=connection_style)})"
+        title = f"[bold blue]Robot Status ({Text(connection_status, style=connection_style)})"
         return Panel(table, title=title, border_style="blue")
     
     def create_camera_status(self) -> Panel:
         """创建相机状态面板"""
         table = Table(show_header=True, box=None, padding=(0, 1))
-        table.add_column("相机", style="cyan")
-        table.add_column("状态")
+        table.add_column("Camera", style="cyan")
+        table.add_column("State")
         table.add_column("FPS", style="yellow")
         
         for camera_name, camera_info in self.status_data["cameras"].items():
-            status = "✅ 连接" if camera_info["connected"] else "❌ 断开"
+            status = "✅ Connected" if camera_info["connected"] else "❌ Disconnected"
             status_style = "green" if camera_info["connected"] else "red"
             fps_text = f"{camera_info['fps']:.1f}" if camera_info["connected"] else "0.0"
             
             display_name = {
-                "ee_cam": "腕部相机",
-                "rgb_rs_0": "侧视相机1", 
-                "rgb_rs_1": "侧视相机2"
+                "ee_cam": "EE Cam",
+                "rgb_rs_0": "Side Cam 1", 
+                "rgb_rs_1": "Side Cam 2"
             }.get(camera_name, camera_name)
             
             table.add_row(display_name, Text(status, style=status_style), fps_text)
         
-        return Panel(table, title="[bold magenta]相机状态", border_style="magenta")
+        return Panel(table, title="[bold magenta]Camera Status", border_style="magenta")
     
     def create_dataset_status(self) -> Panel:
         """创建数据集状态面板"""
         table = Table(show_header=False, box=None, padding=(0, 1))
-        table.add_column("项目", style="cyan")
-        table.add_column("值")
+        table.add_column("Item", style="cyan")
+        table.add_column("Value")
         
-        table.add_row("数据集目录", str(self.status_data["dataset"]["directory"]))
-        table.add_row("总Episode数", f"{self.status_data['dataset']['total_episodes']}")
-        table.add_row("数据集大小", f"{self.status_data['dataset']['current_size_mb']:.1f} MB")
+        table.add_row("Dataset Dir", str(self.status_data["dataset"]["directory"]))
+        table.add_row("Total Episodes", f"{self.status_data['dataset']['total_episodes']}")
+        table.add_row("Dataset Size", f"{self.status_data['dataset']['current_size_mb']:.1f} MB")
         
-        return Panel(table, title="[bold yellow]数据集状态", border_style="yellow")
+        return Panel(table, title="[bold yellow]Dataset Status", border_style="yellow")
     
     def create_gamepad_status(self) -> Panel:
         """创建手柄状态面板"""
-        connection_status = "✅ 已连接" if self.status_data["gamepad"]["connected"] else "❌ 未连接"
+        connection_status = "✅ Connected" if self.status_data["gamepad"]["connected"] else "❌ Disconnected"
         connection_style = "green" if self.status_data["gamepad"]["connected"] else "red"
         
         delta_pos = self.status_data["gamepad"]["delta_pos"]
@@ -203,18 +203,18 @@ class LiveStatusDisplay:
         
         content = Text.assemble(
             Text(connection_status, style=connection_style), "\n",
-            f"位置增量: {pos_text}\n",
-            f"最后指令: {self.status_data['gamepad']['last_command']}"
+            f"Position Increment: {pos_text}\n",
+            f"Last Command: {self.status_data['gamepad']['last_command']}"
         )
         
-        return Panel(content, title="[bold red]手柄状态", border_style="red")
+        return Panel(content, title="[bold red]Gamepad Status", border_style="red")
     
     def create_messages_panel(self) -> Panel:
         """创建消息面板"""
         messages = self.status_data["messages"][-10:]  # 显示最近10条消息
         
         if not messages:
-            content = Text("暂无消息", style="dim")
+            content = Text("No messages", style="dim")
         else:
             content = Text()
             for i, msg in enumerate(messages):
@@ -234,7 +234,7 @@ class LiveStatusDisplay:
                 if i < len(messages) - 1:
                     content.append("\n")
         
-        return Panel(content, title="[bold white]系统消息", border_style="white")
+        return Panel(content, title="[bold white]System Messages", border_style="white")
     
     def create_footer(self) -> Layout:
         """创建底部布局"""
@@ -358,11 +358,11 @@ def test_live_status_display():
             # 随机添加消息
             if random.random() < 0.1:
                 messages = [
-                    ("系统启动完成", "success"),
-                    ("相机连接成功", "info"),
-                    ("录制开始", "info"),
-                    ("检测到错误", "error"),
-                    ("警告：帧率下降", "warning")
+                    ("System Started", "success"),
+                    ("Camera Connected", "info"),
+                    ("Recording Started", "info"),
+                    ("Error Detected", "error"),
+                    ("Warning: Frame Rate Dropped", "warning")
                 ]
                 msg, level = random.choice(messages)
                 display.add_message(msg, level)

@@ -285,16 +285,16 @@ def test_gamepad_controller():
     logger.info("开始测试手柄控制器")
     
     def on_movement(delta_pos, joint5_delta, joint6_delta):
-        logger.info(f"移动: pos={delta_pos}, j5={joint5_delta:.3f}, j6={joint6_delta:.3f}")
+        logger.info(f"Movement: pos={delta_pos}, j5={joint5_delta:.3f}, j6={joint6_delta:.3f}")
     
     def on_grip(toggle):
-        logger.info(f"夹爪切换: {toggle}")
+        logger.info(f"Gripper toggle: {toggle}")
     
     def on_record_start():
-        logger.info("📹 开始录制")
+        logger.info("📹 Start recording")
     
     def on_record_stop():
-        logger.info("⏹️ 停止录制")
+        logger.info("⏹️ Stop recording")
     
     try:
         # 创建手柄控制器
