@@ -66,9 +66,9 @@ class LeRobotDatasetManager:
             "observation.images.ee_cam": {"shape": (3, 480, 640), "dtype": "image"},
             "observation.images.rgb_rs_0": {"shape": (3, 480, 640), "dtype": "image"},
             "observation.images.rgb_rs_1": {"shape": (3, 480, 640), "dtype": "image"},
-            # 关节状态 (位置9维 + 速度8维 = 17维)
-            "observation.state": {"shape": (17,), "dtype": "float32"},
-            # 动作 (8维关节控制)
+            # 关节状态 (只有关节位置8维：6个主关节 + 2个夹爪)
+            "observation.state": {"shape": (8,), "dtype": "float32"},
+            # 动作 (8维关节绝对位置控制)
             "actions": {"shape": (8,), "dtype": "float32"}
         }
         
@@ -175,11 +175,10 @@ class LeRobotDatasetManager:
             modality_path.parent.mkdir(parents=True, exist_ok=True)
             modality_data = {
                 "observation.state": {
-                    "joint_position": {"start": 0, "end": 9},  # 关节位置 9维
-                    "joint_velocity": {"start": 9, "end": 17}  # 关节速度 8维
+                    "joint_position": {"start": 0, "end": 8}  # 关节位置 8维（6个主关节 + 2个夹爪）
                 },
                 "actions": {
-                    "joint_target": {"start": 0, "end": 8, "absolute": True}  # 关节目标 8维
+                    "joint_target": {"start": 0, "end": 8, "absolute": True}  # 关节绝对位置目标 8维
                 }
             }
             
@@ -213,7 +212,7 @@ class LeRobotDatasetManager:
         
         Args:
             camera_images: 相机图像字典，key为相机名称，value为图像数组(CHW格式)
-            robot_state: 机械臂状态向量(17维)
+            robot_state: 机械臂状态向量(8维)
             actions: 动作向量(8维)
             task: 任务描述
             
@@ -230,7 +229,7 @@ class LeRobotDatasetManager:
                 logger.error("相机图像数据类型错误，应为字典")
                 return False
                 
-            if robot_state is None or not isinstance(robot_state, np.ndarray) or len(robot_state) != 17:
+            if robot_state is None or not isinstance(robot_state, np.ndarray) or len(robot_state) != 8:
                 logger.error(f"机械臂状态数据无效: type={type(robot_state)}, shape={getattr(robot_state, 'shape', 'N/A')}")
                 return False
                 
@@ -881,7 +880,7 @@ class LeRobotDatasetManager:
                         logger.error(f"图像字段 {key} 数据格式错误: shape={getattr(first_elem, 'shape', 'N/A')}")
                         return False
                 elif key == 'observation.state':
-                    if not isinstance(first_elem, np.ndarray) or len(first_elem) != 17:
+                    if not isinstance(first_elem, np.ndarray) or len(first_elem) != 8:
                         logger.error(f"状态字段 {key} 数据格式错误: shape={getattr(first_elem, 'shape', 'N/A')}")
                         return False
                 elif key == 'actions':
@@ -927,8 +926,8 @@ def test_lerobot_dataset_manager():
                 "observation.images.rgb_rs_1": np.random.randint(0, 255, (3, 480, 640), dtype=np.uint8)
             }
             
-            # 模拟机械臂状态（17维）
-            robot_state = np.random.rand(17).astype(np.float32)
+            # 模拟机械臂状态（8维）
+            robot_state = np.random.rand(8).astype(np.float32)
             
             # 模拟动作（8维）
             actions = np.random.rand(8).astype(np.float32)

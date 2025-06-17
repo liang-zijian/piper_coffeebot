@@ -126,30 +126,25 @@ class RobotStateRecorder:
     def get_state_vector_for_lerobot(self) -> Optional[np.ndarray]:
         """
         获取适用于lerobot数据集的状态向量
-        状态向量格式：[joint_positions(9), joint_velocities(8)] = 17维
+        状态向量格式：[joint_positions(8)] = 8维（Piper机械臂6个关节 + 2个夹爪）
         
         Returns:
-            17维状态向量，如果数据不可用则返回None
+            8维状态向量（只包含关节位置），如果数据不可用则返回None
         """
-        if self.current_position is None or self.current_velocity is None:
+        if self.current_position is None:
             return None
         
         try:
-            # 确保关节位置为9维（如果是8维则复制夹爪值）
-            if len(self.current_position) == 8:
-                # 复制夹爪值以使其成为9维
-                joint_pos = np.concatenate([
-                    self.current_position, 
-                    [self.current_position[-1]]  # 复制最后一个夹爪值
-                ])
+            # 确保关节位置为8维（Piper机械臂：6个主关节 + 2个夹爪）
+            if len(self.current_position) >= 8:
+                joint_pos = self.current_position[:8]  # 取前8维关节位置
             else:
-                joint_pos = self.current_position[:9]  # 取前9维
+                # 如果不足8维，用零填充
+                joint_pos = np.zeros(8, dtype=np.float32)
+                joint_pos[:len(self.current_position)] = self.current_position
             
-            # 关节速度取前8维
-            joint_vel = self.current_velocity[:8]
-            
-            # 拼接状态向量：位置(9) + 速度(8) = 17维
-            state_vec = np.concatenate([joint_pos, joint_vel]).astype(np.float32)
+            # 直接返回8维关节位置向量
+            state_vec = joint_pos.astype(np.float32)
             
             return state_vec
             
@@ -157,17 +152,29 @@ class RobotStateRecorder:
             logger.error(f"构建状态向量失败: {e}")
             return None
     
-    def get_action_for_lerobot(self, action_type: str = "position_delta") -> Optional[np.ndarray]:
+    def get_action_for_lerobot(self, action_type: str = "absolute_position") -> Optional[np.ndarray]:
         """
         获取适用于lerobot数据集的动作向量
         
         Args:
-            action_type: 动作类型 ("position_delta", "direct_action")
+            action_type: 动作类型 ("absolute_position", "position_delta", "direct_action")
             
         Returns:
             8维动作向量，如果数据不可用则返回None
         """
-        if action_type == "position_delta":
+        if action_type == "absolute_position":
+            # 返回当前关节的绝对位置作为动作（这是我们的目标位置）
+            if self.current_position is not None:
+                # 确保为8维
+                if len(self.current_position) >= 8:
+                    return self.current_position[:8].astype(np.float32)
+                else:
+                    # 如果不足8维，用零填充
+                    padded_position = np.zeros(8, dtype=np.float32)
+                    padded_position[:len(self.current_position)] = self.current_position
+                    return padded_position
+        
+        elif action_type == "position_delta":
             delta = self.calculate_position_delta()
             if delta is not None:
                 # 确保为8维
@@ -192,12 +199,12 @@ class RobotStateRecorder:
         
         return None
     
-    def get_frame_data_for_lerobot(self, action_type: str = "position_delta") -> Dict[str, np.ndarray]:
+    def get_frame_data_for_lerobot(self, action_type: str = "absolute_position") -> Dict[str, np.ndarray]:
         """
         获取适用于lerobot数据集的帧数据
         
         Args:
-            action_type: 动作类型
+            action_type: 动作类型，默认为"absolute_position"（绝对位置）
             
         Returns:
             包含observation.state和actions的字典
@@ -205,12 +212,12 @@ class RobotStateRecorder:
         # 更新机械臂状态
         self.update_robot_state()
         
-        # 获取状态向量
+        # 获取状态向量（8维关节位置）
         state_vec = self.get_state_vector_for_lerobot()
         if state_vec is None:
             return {}
         
-        # 获取动作向量
+        # 获取动作向量（8维关节绝对位置）
         action_vec = self.get_action_for_lerobot(action_type)
         if action_vec is None:
             # 如果没有动作，使用零向量

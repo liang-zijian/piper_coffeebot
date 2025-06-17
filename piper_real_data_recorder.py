@@ -406,13 +406,6 @@ class PiperRealDataRecorder:
                 self.recording = False
                 self.frame_count = 0
                 
-                # 提供用户建议
-                logger.info("💡 保存失败建议:")
-                logger.info("  1. 检查磁盘空间是否充足")
-                logger.info("  2. 确保有足够的录制数据 (至少5帧)")
-                logger.info("  3. 检查LeRobot环境是否正确安装")
-                logger.info("  4. 查看上方的详细错误信息")
-                logger.info("="*60)
                 
         except Exception as e:
             error_msg = f"停止录制时发生异常: {e}"
@@ -432,13 +425,6 @@ class PiperRealDataRecorder:
             self.recording = False
             self.frame_count = 0
             
-            # 提供恢复建议
-            logger.info("🔧 异常恢复措施:")
-            logger.info("  1. 重新启动录制")
-            logger.info("  2. 检查系统资源使用情况")
-            logger.info("  3. 如果问题持续，请重启程序")
-            logger.info("="*60)
-    
     def handle_gamepad_movement(self, delta_pos, joint5_delta, joint6_delta):
         """处理手柄移动输入"""
         if self.piper_controller:
@@ -486,7 +472,7 @@ class PiperRealDataRecorder:
             
             # 获取机械臂状态和动作
             try:
-                frame_data = self.robot_recorder.get_frame_data_for_lerobot("position_delta")
+                frame_data = self.robot_recorder.get_frame_data_for_lerobot("absolute_position")
                 if not frame_data:
                     logger.warning("机械臂状态数据获取失败，跳过此帧")
                     return False
@@ -499,7 +485,7 @@ class PiperRealDataRecorder:
                 return False
             
             # 验证机械臂数据完整性
-            if robot_state is None or not isinstance(robot_state, np.ndarray) or len(robot_state) != 17:
+            if robot_state is None or not isinstance(robot_state, np.ndarray) or len(robot_state) != 8:
                 if self.frame_count % 20 == 0:  # 每20帧提示一次
                     logger.warning(f"机械臂状态数据无效 (类型: {type(robot_state)}, 长度: {len(robot_state) if robot_state is not None else 0})")
                 return False
