@@ -228,9 +228,10 @@ class MultiRealSenseManager:
     def get_color_frames_for_lerobot(self) -> Dict[str, Optional[np.ndarray]]:
         """
         获取所有相机的彩色帧，格式适配lerobot数据集
+        录制时只存储原始BGR图像，避免耗时的颜色转换
         
         Returns:
-            字典，key为lerobot格式的名称，value为RGB图像（HWC格式）
+            字典，key为lerobot格式的名称，value为原始BGR图像（HWC格式）
         """
         results = {}
         
@@ -244,17 +245,46 @@ class MultiRealSenseManager:
         for camera_name in self.pipelines.keys():
             color_image = self.get_frame(camera_name)
             if color_image is not None:
-                # 转换BGR到RGB
-                rgb_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
-                # 转换为CHW格式 (3, H, W)
-                rgb_image_chw = np.transpose(rgb_image, (2, 0, 1))
-                
-                # 使用lerobot格式的键名
+                # 录制时只存储原始BGR图像，避免耗时的转换
+                # 保存时会批量处理BGR→RGB→CHW转换
                 lerobot_key = name_mapping.get(camera_name, f"observation.images.{camera_name}")
-                results[lerobot_key] = rgb_image_chw
+                results[lerobot_key] = color_image  # 直接存储BGR HWC格式
             else:
                 lerobot_key = name_mapping.get(camera_name, f"observation.images.{camera_name}")
                 results[lerobot_key] = None
+        
+        return results
+    
+    @staticmethod
+    def batch_convert_bgr_to_rgb_chw(bgr_images: Dict[str, list]) -> Dict[str, list]:
+        """
+        批量处理BGR→RGB→CHW转换
+        
+        Args:
+            bgr_images: 字典，key为相机名称，value为BGR图像列表(HWC格式)
+            
+        Returns:
+            处理后的图像字典，RGB格式(CHW)
+        """
+        results = {}
+        
+        for camera_key, image_list in bgr_images.items():
+            if not image_list:
+                results[camera_key] = []
+                continue
+                
+            converted_images = []
+            for bgr_image in image_list:
+                if bgr_image is not None:
+                    # BGR→RGB转换
+                    rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
+                    # HWC→CHW转换
+                    rgb_image_chw = np.transpose(rgb_image, (2, 0, 1))
+                    converted_images.append(rgb_image_chw)
+                else:
+                    converted_images.append(None)
+            
+            results[camera_key] = converted_images
         
         return results
     

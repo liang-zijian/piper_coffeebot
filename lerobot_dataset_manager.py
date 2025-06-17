@@ -23,6 +23,9 @@ except ImportError:
     print("警告: 无法导入lerobot模块，请确保已正确安装lerobot")
     LeRobotDataset = None
 
+# 导入多相机管理器用于批量图像处理
+from multi_realsense_cameras import MultiRealSenseManager
+
 # 配置rich日志
 console = Console()
 logging.basicConfig(
@@ -59,6 +62,9 @@ class LeRobotDatasetManager:
         self.episode_idx = 0
         self.frame_count = 0
         self.is_recording = False
+        
+        # 临时存储原始BGR图像数据，用于批量处理
+        self.episode_bgr_images = {}
         
         # 数据集特征定义
         self.features = {
@@ -199,6 +205,16 @@ class LeRobotDatasetManager:
         
         self.is_recording = True
         self.frame_count = 0
+        # 初始化BGR图像临时存储
+        self.episode_bgr_images = {
+            "observation.images.ee_cam": [],
+            "observation.images.rgb_rs_0": [],
+            "observation.images.rgb_rs_1": []
+        }
+        # 初始化机械臂状态和动作临时存储
+        self.episode_robot_states = []
+        self.episode_actions = []
+        self.episode_tasks = []
         logger.info(f"开始录制 episode {self.episode_idx}")
         return True
     
@@ -209,9 +225,10 @@ class LeRobotDatasetManager:
                   task: str = None) -> bool:
         """
         添加一帧数据
+        录制时存储原始BGR图像，避免耗时转换
         
         Args:
-            camera_images: 相机图像字典，key为相机名称，value为图像数组(CHW格式)
+            camera_images: 相机图像字典，key为相机名称，value为原始BGR图像数组(HWC格式)
             robot_state: 机械臂状态向量(8维)
             actions: 动作向量(8维)
             task: 任务描述
@@ -240,7 +257,7 @@ class LeRobotDatasetManager:
             # 构建帧数据
             frame = {}
             
-            # 严格验证和添加相机图像
+            # 验证和临时存储原始BGR图像
             required_cameras = ["observation.images.ee_cam", "observation.images.rgb_rs_0", "observation.images.rgb_rs_1"]
             for key in required_cameras:
                 if key in camera_images and camera_images[key] is not None:
@@ -251,90 +268,34 @@ class LeRobotDatasetManager:
                         logger.error(f"图像 {key} 数据类型错误: {type(img)}")
                         return False
                     
-                    # 确保图像格式正确(CHW, uint8)
+                    # 确保图像格式正确(HWC, uint8) - BGR格式
                     if img.dtype != np.uint8:
                         img = (img * 255).astype(np.uint8) if img.max() <= 1.0 else img.astype(np.uint8)
                     
-                    # 验证图像尺寸
-                    if img.shape != (3, 480, 640):
-                        logger.error(f"图像 {key} 尺寸不匹配: 期望(3,480,640), 实际{img.shape}")
+                    # 验证图像尺寸 - 录制时为HWC格式(480, 640, 3)
+                    if img.shape != (480, 640, 3):
+                        logger.error(f"图像 {key} 尺寸不匹配: 期望(480,640,3), 实际{img.shape}")
                         return False
                     
-                    frame[key] = img
+                    # 存储到临时BGR图像缓存，暂不添加到帧数据
+                    self.episode_bgr_images[key].append(img.copy())
                 else:
                     logger.error(f"必需的相机图像缺失: {key}")
                     return False
             
-            # 添加机械臂状态
-            frame["observation.state"] = robot_state.astype(np.float32)
+            # 临时存储机械臂状态和动作数据，用于后续批量处理
+            self.episode_robot_states.append(robot_state.astype(np.float32))
+            self.episode_actions.append(actions.astype(np.float32))
+            self.episode_tasks.append(task if task is not None else self.task_description)
             
-            # 添加动作
-            frame["actions"] = actions.astype(np.float32)
+            # 录制时只增加帧计数，不进行实际数据集操作
+            self.frame_count += 1
             
-            # 最终验证帧数据完整性
-            expected_keys = ["observation.images.ee_cam", "observation.images.rgb_rs_0", 
-                           "observation.images.rgb_rs_1", "observation.state", "actions"]
-            for key in expected_keys:
-                if key not in frame:
-                    logger.error(f"帧数据缺少必要字段: {key}")
-                    return False
-                    
-                # 验证数据不为None
-                if frame[key] is None:
-                    logger.error(f"帧数据字段为None: {key}")
-                    return False
+            # 每20帧输出一次调试信息
+            if self.frame_count % 20 == 0:
+                logger.info(f"已缓存 {self.frame_count} 帧到episode {self.episode_idx} (BGR格式)")
             
-            # 添加到数据集
-            try:
-                if task is not None:
-                    self.dataset.add_frame(frame, task)
-                else:
-                    self.dataset.add_frame(frame, self.task_description)
-                
-                # 只有在成功添加到数据集后才增加计数器
-                self.frame_count += 1
-                
-                # 每10帧输出一次调试信息
-                if self.frame_count % 10 == 0:
-                    logger.info(f"已添加 {self.frame_count} 帧到episode {self.episode_idx}")
-                
-                # 验证数据集buffer状态（每帧都检查，但只在问题时输出）
-                if hasattr(self.dataset, 'episode_buffer'):
-                    buffer = self.dataset.episode_buffer
-                    if isinstance(buffer, dict):
-                        # 只检查实际的数据字段
-                        data_fields = [
-                            'observation.images.ee_cam',
-                            'observation.images.rgb_rs_0', 
-                            'observation.images.rgb_rs_1',
-                            'observation.state',
-                            'actions',
-                            'task',
-                            'timestamp',
-                            'frame_index'
-                        ]
-                        
-                        for key in data_fields:
-                            if key in buffer and hasattr(buffer[key], '__len__'):
-                                if len(buffer[key]) != self.frame_count:
-                                    logger.warning(f"⚠️ 检测到数据长度不一致: {key}={len(buffer[key])}, frame_count={self.frame_count}")
-                                    break
-                
-                return True
-                
-            except Exception as dataset_e:
-                logger.error(f"添加帧到数据集失败: {dataset_e}")
-                logger.error(f"错误类型: {type(dataset_e).__name__}")
-                
-                # 提供更详细的错误信息
-                logger.error(f"帧数据详细信息:")
-                for key, value in frame.items():
-                    if hasattr(value, 'shape'):
-                        logger.error(f"  {key}: shape={value.shape}, dtype={value.dtype}")
-                    else:
-                        logger.error(f"  {key}: type={type(value)}, value={value}")
-                
-                return False
+            return True
             
         except Exception as e:
             logger.error(f"构建帧数据失败: {e}")
@@ -342,113 +303,118 @@ class LeRobotDatasetManager:
             return False
     
     def end_episode(self) -> bool:
-        """结束当前episode"""
+        """
+        结束当前episode并执行批量图像处理
+        保存时批量处理BGR→RGB→CHW转换
+        """
         logger.info("🔹" * 30)
-        logger.info("📝 开始结束episode流程")
+        logger.info("📝 开始结束episode流程（批量处理模式）")
         
         if not self.is_recording or self.dataset is None:
             logger.error("❌ 未在录制状态或数据集未初始化")
-            logger.error(f"  - is_recording: {self.is_recording}")
-            logger.error(f"  - dataset: {self.dataset is not None}")
             return False
         
         logger.info(f"📊 当前状态:")
         logger.info(f"  - episode_idx: {self.episode_idx}")
         logger.info(f"  - frame_count: {self.frame_count}")
-        logger.info(f"  - is_recording: {self.is_recording}")
         
         # 检查是否有足够的帧数据
         if self.frame_count == 0:
             logger.warning("⚠️ 当前episode没有录制任何帧数据，跳过保存")
-            # 重置状态但不保存
-            self.is_recording = False
-            self.frame_count = 0
-            logger.info("✅ 状态已重置")
+            self._reset_episode_state()
             return True
         
-        # 放宽最小帧数要求 - 从5帧降低到2帧，使保存更容易成功
-        min_frames = 2  # 降低最小帧数要求
+        min_frames = 2
         if self.frame_count < min_frames:
             logger.warning(f"⚠️ 当前episode帧数太少 ({self.frame_count} < {min_frames})，跳过保存")
-            self.is_recording = False
-            self.frame_count = 0
-            logger.info("✅ 状态已重置")
+            self._reset_episode_state()
             return True
         
         logger.info(f"💾 开始保存episode {self.episode_idx}，共 {self.frame_count} 帧...")
         
         try:
-            # Step 1: 同步帧计数
-            logger.info("🔄 步骤1: 同步帧计数...")
-            synced_count = self._sync_frame_count()
-            logger.info(f"   同步结果: {self.frame_count} -> {synced_count}")
+            # Step 1: 批量处理BGR图像转换为RGB CHW格式
+            logger.info("🎨 步骤1: 批量处理BGR→RGB→CHW转换...")
+            batch_start_time = time.time()
             
-            # Step 2: 检查buffer状态
-            logger.info("🔍 步骤2: 检查episode buffer...")
-            buffer_ok = self._check_buffer_status()
-            if not buffer_ok:
-                logger.error("❌ Buffer状态检查失败")
-                self._reset_episode_state()
-                return False
+            processed_images = MultiRealSenseManager.batch_convert_bgr_to_rgb_chw(self.episode_bgr_images)
             
-            # Step 3: 尝试修复数据不一致问题（如果存在）
-            logger.info("🔧 步骤3: 尝试修复数据不一致...")
-            fix_ok = self._try_fix_data_inconsistency(min_frames)
-            if not fix_ok:
-                logger.error("❌ 数据修复失败")
-                self._reset_episode_state()
-                return False
+            batch_duration = time.time() - batch_start_time
+            logger.info(f"   批量转换耗时: {batch_duration:.3f}秒 ({self.frame_count} 帧)")
             
-            # Step 4: 最终验证（简化版本，更容错）
-            logger.info("✅ 步骤4: 最终数据验证...")
-            if not self._validate_episode_data_simple():
-                logger.error("❌ 最终数据验证失败")
-                self._reset_episode_state()
-                return False
+            # Step 2: 验证处理后的图像数据
+            for camera_key, images in processed_images.items():
+                if len(images) != self.frame_count:
+                    logger.error(f"❌ 相机 {camera_key} 图像数量不匹配: {len(images)} != {self.frame_count}")
+                    self._reset_episode_state()
+                    return False
             
-            # Step 5: 保存episode
-            logger.info("💾 步骤5: 保存episode到磁盘...")
+            # Step 3: 批量添加帧到数据集
+            logger.info("📦 步骤2: 批量添加帧到数据集...")
+            for frame_idx in range(self.frame_count):
+                frame = {}
+                
+                # 添加处理后的图像
+                for camera_key in ["observation.images.ee_cam", "observation.images.rgb_rs_0", "observation.images.rgb_rs_1"]:
+                    if camera_key in processed_images and frame_idx < len(processed_images[camera_key]):
+                        frame[camera_key] = processed_images[camera_key][frame_idx]
+                    else:
+                        logger.error(f"❌ 帧 {frame_idx} 图像数据缺失: {camera_key}")
+                        self._reset_episode_state()
+                        return False
+                
+                # 添加机械臂状态和动作
+                frame["observation.state"] = self.episode_robot_states[frame_idx]
+                frame["actions"] = self.episode_actions[frame_idx]
+                
+                # 添加到数据集
+                try:
+                    self.dataset.add_frame(frame, self.episode_tasks[frame_idx])
+                except Exception as e:
+                    logger.error(f"❌ 添加帧 {frame_idx} 失败: {e}")
+                    self._reset_episode_state()
+                    return False
+            
+            # Step 4: 保存episode到磁盘
+            logger.info("💾 步骤3: 保存episode到磁盘...")
             save_start = time.time()
             self.dataset.save_episode()
-            save_time = time.time() - save_start
+            save_duration = time.time() - save_start
+            
+            total_duration = time.time() - batch_start_time
             
             logger.info(f"✅ Episode {self.episode_idx} 保存成功!")
             logger.info(f"   📈 数据统计: {self.frame_count} 帧")
-            logger.info(f"   ⏱️  保存耗时: {save_time:.2f}秒")
+            logger.info(f"   🎨 批量转换耗时: {batch_duration:.3f}秒")
+            logger.info(f"   💾 磁盘保存耗时: {save_duration:.3f}秒")
+            logger.info(f"   ⏱️  总耗时: {total_duration:.3f}秒")
             
             # 更新状态
             self.episode_idx += 1
-            self.frame_count = 0
-            self.is_recording = False
+            self._reset_episode_state()
             
             logger.info("🔹" * 30)
             return True
             
         except Exception as e:
-            logger.error("❌" * 30)
-            logger.error(f"💥 保存episode异常: {e}")
-            logger.error(f"🔍 错误类型: {type(e).__name__}")
-            logger.error(f"📄 错误详情: {str(e)}")
-            
-            # 打印关键错误堆栈（简化版）
+            logger.error(f"❌ 保存episode异常: {e}")
+            logger.error(f"错误类型: {type(e).__name__}")
             import traceback
-            error_lines = traceback.format_exc().split('\n')
-            # 只显示最后几行关键错误信息
-            key_lines = [line for line in error_lines if any(keyword in line.lower() for keyword in ['error', 'exception', 'failed', 'file', 'line'])]
-            if key_lines:
-                logger.error("🔍 关键错误信息:")
-                for line in key_lines[-5:]:  # 最后5行关键信息
-                    if line.strip():
-                        logger.error(f"   {line.strip()}")
+            logger.error("错误堆栈:")
+            logger.error(traceback.format_exc())
             
-            # 简化的调试信息
-            self._log_simple_debug_info()
-            
-            # 重置状态
             self._reset_episode_state()
-            
-            logger.error("❌" * 30)
             return False
+    
+    def _reset_episode_state(self):
+        """重置episode状态"""
+        self.is_recording = False
+        self.frame_count = 0
+        self.episode_bgr_images = {}
+        if hasattr(self, 'episode_robot_states'):
+            self.episode_robot_states = []
+            self.episode_actions = []
+            self.episode_tasks = []
     
     def _check_buffer_status(self) -> bool:
         """检查episode buffer状态"""

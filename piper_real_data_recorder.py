@@ -458,17 +458,17 @@ class PiperRealDataRecorder:
             required_cameras = ["observation.images.ee_cam", "observation.images.rgb_rs_0", "observation.images.rgb_rs_1"]
             for camera_key in required_cameras:
                 if camera_key not in camera_images or camera_images[camera_key] is None:
-                    # 如果任何一个相机数据缺失，使用黑屏图像替代
+                    # 如果任何一个相机数据缺失，使用黑屏图像替代(BGR HWC格式)
                     if self.frame_count % 50 == 0:  # 每50帧提示一次，避免日志过多
                         logger.warning(f"相机数据缺失: {camera_key}，使用黑屏图像替代")
-                    camera_images[camera_key] = np.zeros((3, 480, 640), dtype=np.uint8)
+                    camera_images[camera_key] = np.zeros((480, 640, 3), dtype=np.uint8)
                 
-                # 验证图像尺寸并修复
+                # 验证图像尺寸并修复(期望BGR HWC格式)
                 img = camera_images[camera_key]
-                if not isinstance(img, np.ndarray) or img.shape != (3, 480, 640):
+                if not isinstance(img, np.ndarray) or img.shape != (480, 640, 3):
                     if self.frame_count % 50 == 0:  # 每50帧提示一次
                         logger.warning(f"图像 {camera_key} 格式不正确，重新创建")
-                    camera_images[camera_key] = np.zeros((3, 480, 640), dtype=np.uint8)
+                    camera_images[camera_key] = np.zeros((480, 640, 3), dtype=np.uint8)
             
             # 获取机械臂状态和动作
             try:
