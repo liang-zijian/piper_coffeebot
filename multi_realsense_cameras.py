@@ -11,19 +11,8 @@ import time
 import threading
 from collections import deque
 from typing import Dict, Tuple, Optional, List
-from rich.console import Console
-from rich.logging import RichHandler
-import logging
-
-# 配置rich日志
-console = Console()
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[RichHandler(console=console, rich_tracebacks=True)]
-)
-logger = logging.getLogger("MultiRealSense")
+# 导入全局日志管理器
+from global_logger import log_message, log_info, log_warning, log_error, log_success
 
 class MultiRealSenseManager:
     """多RealSense相机管理器"""
@@ -74,7 +63,7 @@ class MultiRealSenseManager:
         if len(devices) == 0:
             raise RuntimeError("未检测到RealSense设备")
         
-        logger.info(f"检测到 {len(devices)} 个RealSense设备")
+        log_message(f"检测到 {len(devices)} 个RealSense设备", "info", "Camera")
         
         # 打印设备信息
         available_serials = []
@@ -82,26 +71,26 @@ class MultiRealSenseManager:
             serial = device.get_info(rs.camera_info.serial_number)
             name = device.get_info(rs.camera_info.name)
             available_serials.append(serial)
-            logger.info(f"设备 {i}: {name} (序列号: {serial})")
+            log_message(f"设备 {i}: {name} (序列号: {serial})", "info", "Camera")
         
         # 如果配置中没有指定序列号，自动分配
         camera_names = list(self.camera_configs.keys())
         for i, (camera_name, config) in enumerate(self.camera_configs.items()):
             if "serial" not in config and i < len(available_serials):
                 config["serial"] = available_serials[i]
-                logger.info(f"自动分配相机 {camera_name} 到设备 {available_serials[i]}")
+                log_message(f"自动分配相机 {camera_name} 到设备 {available_serials[i]}", "info", "Camera")
         
         # 初始化每个相机
         for camera_name, config in self.camera_configs.items():
             if "serial" not in config:
-                logger.warning(f"跳过相机 {camera_name}：没有可用的设备")
+                log_message(f"跳过相机 {camera_name}：没有可用的设备", "warning", "Camera")
                 continue
                 
             try:
                 self._init_single_camera(camera_name, config)
-                logger.info(f"✅ 相机 {camera_name} 初始化成功")
+                log_message(f"✅ 相机 {camera_name} 初始化成功", "success", "Camera")
             except Exception as e:
-                logger.error(f"❌ 相机 {camera_name} 初始化失败: {e}")
+                log_message(f"❌ 相机 {camera_name} 初始化失败: {e}", "error", "Camera")
     
     def _init_single_camera(self, camera_name: str, config: Dict):
         """初始化单个相机"""
@@ -153,13 +142,13 @@ class MultiRealSenseManager:
             )
             self.camera_threads[camera_name] = thread
             thread.start()
-            logger.info(f"启动相机 {camera_name} 帧获取线程")
+            log_message(f"启动相机 {camera_name} 帧获取线程", "info", "Camera")
     
     def _camera_frame_thread(self, camera_name: str):
         """单个相机的帧获取线程"""
         pipeline = self.pipelines[camera_name]
         
-        logger.info(f"相机 {camera_name} 线程开始运行")
+        log_message(f"相机 {camera_name} 线程开始运行", "info", "Camera")
         
         while self.running:
             try:
@@ -183,10 +172,10 @@ class MultiRealSenseManager:
                 
             except Exception as e:
                 if self.running:  # 只在运行时记录错误
-                    logger.warning(f"相机 {camera_name} 线程错误: {e}")
+                    log_message(f"相机 {camera_name} 线程错误: {e}", "warning", "Camera")
                 time.sleep(0.01)
         
-        logger.info(f"相机 {camera_name} 线程结束")
+        log_message(f"相机 {camera_name} 线程结束", "info", "Camera")
     
     def get_frame(self, camera_name: str) -> Optional[np.ndarray]:
         """
@@ -309,7 +298,7 @@ class MultiRealSenseManager:
                 'coeffs': intrinsics.coeffs
             }
         except Exception as e:
-            logger.warning(f"获取相机 {camera_name} 内参失败: {e}")
+            log_message(f"获取相机 {camera_name} 内参失败: {e}", "warning", "Camera")
         
         return None
     
@@ -322,7 +311,7 @@ class MultiRealSenseManager:
             if color_image is not None:
                 cv2.imwrite(f"{prefix}_{camera_name}_color_{timestamp}.png", color_image)
         
-        logger.info(f"💾 所有相机帧已保存: {prefix}_*_{timestamp}")
+        log_message(f"💾 所有相机帧已保存: {prefix}_*_{timestamp}", "success", "Camera")
     
     def get_camera_count(self) -> int:
         """获取成功初始化的相机数量"""
@@ -344,24 +333,24 @@ class MultiRealSenseManager:
         """停止所有相机和线程"""
         # 首先停止线程
         self.running = False
-        logger.info("正在停止所有相机线程...")
+        log_message("正在停止所有相机线程...", "info", "Camera")
         
         # 等待所有线程结束
         for camera_name, thread in self.camera_threads.items():
             if thread.is_alive():
                 thread.join(timeout=2.0)
                 if thread.is_alive():
-                    logger.warning(f"相机 {camera_name} 线程未能正常结束")
+                    log_message(f"相机 {camera_name} 线程未能正常结束", "warning", "Camera")
                 else:
-                    logger.info(f"相机 {camera_name} 线程已结束")
+                    log_message(f"相机 {camera_name} 线程已结束", "info", "Camera")
         
         # 停止所有管道
         for camera_name, pipeline in self.pipelines.items():
             try:
                 pipeline.stop()
-                logger.info(f"相机 {camera_name} 管道已停止")
+                log_message(f"相机 {camera_name} 管道已停止", "info", "Camera")
             except Exception as e:
-                logger.warning(f"停止相机 {camera_name} 管道失败: {e}")
+                log_message(f"停止相机 {camera_name} 管道失败: {e}", "warning", "Camera")
         
         # 清理所有资源
         self.pipelines.clear()
@@ -379,11 +368,11 @@ def test_multi_cameras():
         manager = MultiRealSenseManager()
         
         if manager.get_camera_count() == 0:
-            logger.error("没有成功初始化任何相机")
+            log_message("没有成功初始化任何相机", "error", "Camera")
             return
         
-        logger.info(f"成功初始化 {manager.get_camera_count()} 个相机")
-        logger.info(f"相机列表: {manager.get_camera_names()}")
+        log_message(f"成功初始化 {manager.get_camera_count()} 个相机", "success", "Camera")
+        log_message(f"相机列表: {manager.get_camera_names()}", "info", "Camera")
         
         # 创建显示窗口
         camera_names = manager.get_camera_names()
@@ -420,7 +409,7 @@ def test_multi_cameras():
                 fps = 30 / (end_time - start_time)
                 queue_status = manager.get_queue_status()
                 queue_info = ", ".join([f"{name}:{count}" for name, count in queue_status.items()])
-                logger.info(f"FPS: {fps:.2f}, 有效帧: {valid_frames}/{len(camera_names)}, 队列: [{queue_info}]")
+                log_message(f"FPS: {fps:.2f}, 有效帧: {valid_frames}/{len(camera_names)}, 队列: [{queue_info}]", "info", "Camera")
                 start_time = time.time()
             
             # 处理按键
@@ -431,13 +420,13 @@ def test_multi_cameras():
                 manager.save_frames()
         
     except Exception as e:
-        logger.error(f"测试失败: {e}")
+        log_message(f"测试失败: {e}", "error", "Camera")
     finally:
         # 清理资源
         if 'manager' in locals():
             manager.stop_all()
         cv2.destroyAllWindows()
-        logger.info("测试结束")
+        log_message("测试结束", "info", "Camera")
 
 
 if __name__ == "__main__":

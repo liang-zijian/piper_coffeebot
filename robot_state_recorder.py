@@ -7,20 +7,10 @@
 import numpy as np
 import time
 from typing import Dict, List, Optional, Tuple
-from rich.console import Console
-from rich.logging import RichHandler
-import logging
 from collections import deque
 
-# 配置rich日志
-console = Console()
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[RichHandler(console=console, rich_tracebacks=True)]
-)
-logger = logging.getLogger("RobotStateRecorder")
+# 导入全局日志管理器
+from global_logger import log_message, log_info, log_warning, log_error, log_success
 
 class RobotStateRecorder:
     """机械臂状态记录器"""
@@ -57,7 +47,7 @@ class RobotStateRecorder:
         # 获取关节索引
         self.dofs_idx = [self.piper.get_joint(name).dof_idx_local for name in self.JOINT_NAMES]
         
-        logger.info("✅ 机械臂状态记录器初始化完成")
+        log_message("✅ 机械臂状态记录器初始化完成", "success", "Robot")
     
     def update_robot_state(self) -> Dict[str, np.ndarray]:
         """
@@ -88,7 +78,7 @@ class RobotStateRecorder:
             }
             
         except Exception as e:
-            logger.error(f"更新机械臂状态失败: {e}")
+            log_message(f"更新机械臂状态失败: {e}", "error", "Robot")
             return {}
     
     def record_action(self, action: np.ndarray) -> None:
@@ -149,7 +139,7 @@ class RobotStateRecorder:
             return state_vec
             
         except Exception as e:
-            logger.error(f"构建状态向量失败: {e}")
+            log_message(f"构建状态向量失败: {e}", "error", "Robot")
             return None
     
     def get_action_for_lerobot(self, action_type: str = "absolute_position") -> Optional[np.ndarray]:
@@ -260,7 +250,7 @@ class RobotStateRecorder:
         self.velocity_history.clear()
         self.action_history.clear()
         self.timestamp_history.clear()
-        logger.info("历史数据已清空")
+        log_message("历史数据已清空", "info", "Robot")
     
     def get_current_joint_info(self) -> Dict[str, float]:
         """获取当前关节信息的字典格式"""
@@ -279,8 +269,8 @@ def test_robot_state_recorder():
     """测试机械臂状态记录器（需要真实的机械臂实例）"""
     # 这个测试函数需要真实的机械臂实例
     # 在实际使用中，piper_robot应该是一个有效的Piper机械臂实例
-    logger.info("机械臂状态记录器测试函数")
-    logger.info("需要真实的机械臂实例才能运行测试")
+    log_message("机械臂状态记录器测试函数", "info", "Robot")
+    log_message("需要真实的机械臂实例才能运行测试", "info", "Robot")
     
     # 模拟测试
     class MockPiperRobot:
@@ -325,7 +315,7 @@ def test_robot_state_recorder():
     for i in range(5):
         # 更新机械臂状态
         state_data = recorder.update_robot_state()
-        logger.info(f"更新 {i+1}: 关节位置均值 = {np.mean(state_data['joint_position']):.4f}")
+        log_message(f"更新 {i+1}: 关节位置均值 = {np.mean(state_data['joint_position']):.4f}", "info", "Robot")
         
         # 模拟动作
         mock_action = np.random.rand(8) * 0.01
@@ -333,16 +323,16 @@ def test_robot_state_recorder():
         
         # 获取lerobot格式数据
         frame_data = recorder.get_frame_data_for_lerobot()
-        logger.info(f"状态向量维度: {frame_data['observation.state'].shape}")
-        logger.info(f"动作向量维度: {frame_data['actions'].shape}")
+        log_message(f"状态向量维度: {frame_data['observation.state'].shape}", "info", "Robot")
+        log_message(f"动作向量维度: {frame_data['actions'].shape}", "info", "Robot")
         
         time.sleep(0.1)
     
     # 获取统计信息
     stats = recorder.get_statistics()
-    logger.info(f"缓冲区大小: {stats['buffer_size']}")
+    log_message(f"缓冲区大小: {stats['buffer_size']}", "info", "Robot")
     
-    logger.info("测试完成")
+    log_message("测试完成", "success", "Robot")
 
 
 if __name__ == "__main__":

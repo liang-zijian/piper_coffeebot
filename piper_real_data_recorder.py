@@ -17,27 +17,15 @@ from typing import Optional
 import genesis as gs
 from piper_xiaoji_real import PiperController
 
+# 导入全局日志管理器
+from global_logger import log_message, log_info, log_warning, log_error, log_success, set_live_display
+
 # 导入自定义模块
 from multi_realsense_cameras import MultiRealSenseManager
 from robot_state_recorder import RobotStateRecorder
 from lerobot_dataset_manager import LeRobotDatasetManager
 from gamepad_controller import ThreadedGamepadController
 from live_status_display import LiveStatusDisplay
-
-# 导入rich用于日志
-from rich.console import Console
-from rich.logging import RichHandler
-import logging
-
-# 配置日志
-console = Console()
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[RichHandler(console=console, rich_tracebacks=True)]
-)
-logger = logging.getLogger("PiperDataRecorder")
 
 class PiperRealDataRecorder:
     """Piper机械臂真实环境数据录制器"""
@@ -73,12 +61,12 @@ class PiperRealDataRecorder:
         self.fps_start_time = time.time()
         self.current_fps = 0.0
         
-        logger.info("Piper data recorder initialized")
+        log_message("Piper data recorder initialized", "info", "Main")
     
     def setup_signal_handlers(self):
         """设置信号处理器"""
         def signal_handler(signum, frame):
-            logger.info("Received exit signal, shutting down...")
+            log_message("Received exit signal, shutting down...", "info")
             self.shutdown()
             sys.exit(0)
         
@@ -88,7 +76,7 @@ class PiperRealDataRecorder:
     def init_genesis_scene(self):
         """初始化Genesis仿真场景"""
         try:
-            logger.info("Initializing Genesis scene...")
+            log_message("Initializing Genesis scene...", "info")
             
             gs.init(backend=gs.gpu)
             
@@ -125,17 +113,17 @@ class PiperRealDataRecorder:
                 np.array([87, 87, 87, 87, 12, 12, 100, 100]),
             )
             
-            logger.info("✅ Genesis scene initialized")
+            log_message("✅ Genesis scene initialized", "success")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Genesis scene initialization failed: {e}")
+            log_message(f"❌ Genesis scene initialization failed: {e}", "error")
             return False
     
     def init_cameras(self):
         """初始化相机"""
         try:
-            logger.info("Initializing RealSense cameras...")
+            log_message("Initializing RealSense cameras...", "info")
             
             # 相机配置
             camera_configs = {
@@ -147,32 +135,32 @@ class PiperRealDataRecorder:
             self.camera_manager = MultiRealSenseManager(camera_configs)
             
             if self.camera_manager.get_camera_count() == 0:
-                logger.warning("⚠️ No RealSense cameras detected, using simulated data")
+                log_message("⚠️ No RealSense cameras detected, using simulated data", "warning")
                 return False
             
-            logger.info(f"✅ Successfully initialized {self.camera_manager.get_camera_count()} cameras")
+            log_message(f"✅ Successfully initialized {self.camera_manager.get_camera_count()} cameras", "success")
             return True
             
         except Exception as e:
-            logger.error(f"Camera initialization failed: {e}")
+            log_message(f"Camera initialization failed: {e}", "error")
             return False
     
     def init_robot_recorder(self):
         """初始化机械臂状态记录器"""
         try:
-            logger.info("Initializing robot state recorder...")
+            log_message("Initializing robot state recorder...", "info")
             self.robot_recorder = RobotStateRecorder(self.piper_robot)
-            logger.info("Robot state recorder initialized")
+            log_message("Robot state recorder initialized", "success")
             return True
             
         except Exception as e:
-            logger.error(f"Robot state recorder initialization failed: {e}")
+            log_message(f"Robot state recorder initialization failed: {e}", "error")
             return False
     
     def init_dataset_manager(self):
         """初始化数据集管理器"""
         try:
-            logger.info("初始化数据集管理器...")
+            log_message("初始化数据集管理器...", "info")
             
             self.dataset_manager = LeRobotDatasetManager(
                 dataset_dir=self.args.dataset_dir,
@@ -183,20 +171,20 @@ class PiperRealDataRecorder:
             
             # 创建数据集
             if not self.dataset_manager.create_dataset(resume=self.args.resume):
-                logger.error("Dataset creation failed")
+                log_message("Dataset creation failed", "error")
                 return False
             
-            logger.info("✅ Dataset manager initialized")
+            log_message("✅ Dataset manager initialized", "success")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Dataset manager initialization failed: {e}")
+            log_message(f"❌ Dataset manager initialization failed: {e}", "error")
             return False
     
     def init_piper_controller(self):
         """初始化Piper控制器"""
         try:
-            logger.info("Initializing Piper controller...")
+            log_message("Initializing Piper controller...", "info")
             
             # 创建虚拟相机（用于兼容原始代码）
             cams = []
@@ -210,17 +198,17 @@ class PiperRealDataRecorder:
             )
             
             self.piper_controller.start()
-            logger.info("✅ Piper controller initialized")
+            log_message("✅ Piper controller initialized", "success")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Piper controller initialization failed: {e}")
+            log_message(f"❌ Piper controller initialization failed: {e}", "error")
             return False
     
     def init_gamepad_controller(self):
         """初始化手柄控制器"""
         try:
-            logger.info("初始化手柄控制器...")
+            log_message("初始化手柄控制器...", "info")
             
             self.gamepad_controller = ThreadedGamepadController()
             
@@ -231,32 +219,35 @@ class PiperRealDataRecorder:
             self.gamepad_controller.set_grip_callback(self.handle_gamepad_grip)
             
             if not self.gamepad_controller.start_threaded():
-                logger.warning("⚠️ Gamepad controller initialization failed, using keyboard control only")
+                log_message("⚠️ Gamepad controller initialization failed, using keyboard control only", "warning")
                 return False
             
-            logger.info("✅ Gamepad controller initialized")
+            log_message("✅ Gamepad controller initialized", "success")
             return True
             
         except Exception as e:
-            logger.warning(f"⚠️ Gamepad controller initialization failed: {e}")
+            log_message(f"⚠️ Gamepad controller initialization failed: {e}", "warning")
             return False
     
     def init_status_display(self):
         """初始化状态显示"""
         try:
-            logger.info("Initializing status display...")
+            log_message("Initializing status display...", "info", "Main")
             
             self.status_display = LiveStatusDisplay(refresh_rate=10.0)
+            
+            # 设置全局Live面板显示器
+            set_live_display(self.status_display)
             
             # 启动状态显示线程
             self.status_thread = threading.Thread(target=self.run_status_display, daemon=True)
             self.status_thread.start()
             
-            logger.info("Status display initialized")
+            log_message("Status display initialized", "success", "Main")
             return True
             
         except Exception as e:
-            logger.error(f"Status display initialization failed: {e}")
+            log_message(f"Status display initialization failed: {e}", "error", "Main")
             return False
     
     def run_status_display(self):
@@ -264,7 +255,7 @@ class PiperRealDataRecorder:
         try:
             self.status_display.start()
         except Exception as e:
-            logger.error(f"Status display running failed: {e}")
+            log_message(f"Status display running failed: {e}", "error")
     
     def update_status_display(self):
         """更新状态显示数据"""
@@ -313,57 +304,51 @@ class PiperRealDataRecorder:
     def start_recording(self):
         """开始录制"""
         if self.recording:
-            logger.warning("Already recording")
+            log_message("Already recording", "warning")
             return
         
         if not self.dataset_manager:
-            logger.error("Dataset manager not initialized")
+            log_message("Dataset manager not initialized", "error")
             return
         
-        logger.info("🎬 Start recording episode...")
+        log_message("🎬 Start recording episode...", "info")
         
         if self.dataset_manager.start_episode():
             self.recording = True
             self.frame_count = 0
-            self.status_display.add_message("Start recording new episode", "success")
+            log_message("Start recording new episode", "success")
         else:
-            logger.error("Start recording failed")
-            self.status_display.add_message("Start recording failed", "error")
+            log_message("Start recording failed", "error")
     
     def stop_recording(self):
         """停止录制"""
         if not self.recording:
-            logger.warning("Not recording")
-            if self.status_display:
-                self.status_display.add_message("Not recording", "warning")
+            log_message("Not recording", "warning")
             return
         
         if not self.dataset_manager:
-            logger.error("Dataset manager not initialized")
-            if self.status_display:
-                self.status_display.add_message("Dataset manager not initialized", "error")
+            log_message("Dataset manager not initialized", "error")
             return
         
-        logger.info("="*60)
-        logger.info(f"🎬 Start stopping recording process")
-        logger.info(f"⏹️ Stop recording episode {self.episode_count}...")
-        logger.info(f"Current recorded frames: {self.frame_count}")
-        logger.info("="*60)
+        log_message("="*60, "info")
+        log_message(f"🎬 Start stopping recording process", "info")
+        log_message(f"⏹️ Stop recording episode {self.episode_count}...", "info")
+        log_message(f"Current recorded frames: {self.frame_count}", "info")
+        log_message("="*60, "info")
         
         # 检查是否有录制的帧数据
         if self.frame_count == 0:
-            logger.warning("⚠️ 当前episode没有录制任何帧数据")
-            if self.status_display:
-                self.status_display.add_message("Episode has no data, skip saving", "warning")
+            log_message("⚠️ 当前episode没有录制任何帧数据", "warning")
+            log_message("Episode has no data, skip saving", "warning")
             
             # 仍然调用end_episode以正确重置状态
-            logger.info("Call dataset_manager.end_episode() to reset state...")
+            log_message("Call dataset_manager.end_episode() to reset state...", "info")
             if self.dataset_manager.end_episode():
                 self.recording = False
-                logger.info("✅ State reset successfully")
+                log_message("✅ State reset successfully", "success")
                 return
             else:
-                logger.error("❌ State reset failed")
+                log_message("❌ State reset failed", "error")
                 self.recording = False
                 return
         
@@ -371,36 +356,30 @@ class PiperRealDataRecorder:
             # 记录保存开始时间
             import time
             save_start_time = time.time()
-            logger.info(f"🔄 Start saving episode data...")
+            log_message(f"🔄 Start saving episode data...", "info")
             
             # 尝试结束episode
             save_result = self.dataset_manager.end_episode()
             save_duration = time.time() - save_start_time
             
-            logger.info(f"💾 Save operation took: {save_duration:.2f} seconds")
-            logger.info(f"💾 Save result: {'Success' if save_result else 'Failed'}")
+            log_message(f"💾 Save operation took: {save_duration:.2f} seconds", "info")
+            log_message(f"💾 Save result: {'Success' if save_result else 'Failed'}", "info")
             
             if save_result:
                 self.recording = False
                 self.episode_count += 1
                 
                 success_msg = f"Episode {self.episode_count} Done ({self.frame_count} frames)"
-                logger.info(f"✅ {success_msg}")
-                logger.info("="*60)
-                
-                if self.status_display:
-                    self.status_display.add_message(success_msg, "success")
+                log_message(f"✅ {success_msg}", "success")
+                log_message("="*60, "info")
                 
                 # 重置帧计数器
                 self.frame_count = 0
                 
             else:
                 error_msg = "Episode save failed"
-                logger.error(f"❌ {error_msg}")
-                logger.error("="*60)
-                
-                if self.status_display:
-                    self.status_display.add_message(error_msg, "error")
+                log_message(f"❌ {error_msg}", "error")
+                log_message("="*60, "error")
                     
                 # 即使保存失败，也要重置录制状态以避免卡住
                 self.recording = False
@@ -409,17 +388,16 @@ class PiperRealDataRecorder:
                 
         except Exception as e:
             error_msg = f"Stop recording failed: {e}"
-            logger.error(f"❌ {error_msg}")
-            logger.error(f"Exception type: {type(e).__name__}")
-            logger.error("="*60)
+            log_message(f"❌ {error_msg}", "error")
+            log_message(f"Exception type: {type(e).__name__}", "error")
+            log_message("="*60, "error")
             
             # 打印完整错误堆栈
             import traceback
-            logger.error("Full error stack:")
-            logger.error(traceback.format_exc())
+            log_message("Full error stack:", "error")
+            log_message(traceback.format_exc(), "error")
             
-            if self.status_display:
-                self.status_display.add_message("Stop recording failed", "error")
+            log_message("Stop recording failed", "error")
             
             # 强制重置状态
             self.recording = False
@@ -451,7 +429,7 @@ class PiperRealDataRecorder:
                 try:
                     camera_images = self.camera_manager.get_color_frames_for_lerobot()
                 except Exception as cam_e:
-                    logger.warning(f"Camera data acquisition failed: {cam_e}, using simulated data")
+                    log_message(f"Camera data acquisition failed: {cam_e}, using simulated data", "warning")
                     camera_images = {}
             
             # 确保所有必需的相机数据都存在
@@ -460,39 +438,39 @@ class PiperRealDataRecorder:
                 if camera_key not in camera_images or camera_images[camera_key] is None:
                     # 如果任何一个相机数据缺失，使用黑屏图像替代(BGR HWC格式)
                     if self.frame_count % 50 == 0:  # 每50帧提示一次，避免日志过多
-                        logger.warning(f"Camera data missing: {camera_key}, using black screen image")
+                        log_message(f"Camera data missing: {camera_key}, using black screen image", "warning")
                     camera_images[camera_key] = np.zeros((480, 640, 3), dtype=np.uint8)
                 
                 # 验证图像尺寸并修复(期望BGR HWC格式)
                 img = camera_images[camera_key]
                 if not isinstance(img, np.ndarray) or img.shape != (480, 640, 3):
                     if self.frame_count % 50 == 0:  # 每50帧提示一次
-                        logger.warning(f"Image {camera_key} format incorrect, recreate")
+                        log_message(f"Image {camera_key} format incorrect, recreate", "warning")
                     camera_images[camera_key] = np.zeros((480, 640, 3), dtype=np.uint8)
             
             # 获取机械臂状态和动作
             try:
                 frame_data = self.robot_recorder.get_frame_data_for_lerobot("absolute_position")
                 if not frame_data:
-                    logger.warning("Robot state data acquisition failed, skip this frame")
+                    log_message("Robot state data acquisition failed, skip this frame", "warning")
                     return False
                 
                 robot_state = frame_data.get("observation.state")
                 actions = frame_data.get("actions")
                 
             except Exception as robot_e:
-                logger.warning(f"Robot data acquisition exception: {robot_e}, skip this frame")
+                log_message(f"Robot data acquisition exception: {robot_e}, skip this frame", "warning")
                 return False
             
             # 验证机械臂数据完整性
             if robot_state is None or not isinstance(robot_state, np.ndarray) or len(robot_state) != 8:
                 if self.frame_count % 20 == 0:  # 每20帧提示一次
-                    logger.warning(f"Robot state data invalid (type: {type(robot_state)}, length: {len(robot_state) if robot_state is not None else 0})")
+                    log_message(f"Robot state data invalid (type: {type(robot_state)}, length: {len(robot_state) if robot_state is not None else 0})", "warning")
                 return False
                 
             if actions is None or not isinstance(actions, np.ndarray) or len(actions) != 8:
                 if self.frame_count % 20 == 0:  # 每20帧提示一次
-                    logger.warning(f"Action data invalid (type: {type(actions)}, length: {len(actions) if actions is not None else 0})")
+                    log_message(f"Action data invalid (type: {type(actions)}, length: {len(actions) if actions is not None else 0})", "warning")
                 return False
             
             # ------- 同步夹爪状态到 robot_state 与 actions -------
@@ -509,7 +487,7 @@ class PiperRealDataRecorder:
                     robot_state[-2:] = open_val
             except Exception as grip_e:
                 if self.frame_count % 50 == 0:
-                    logger.warning(f"更新夹爪开合状态失败: {grip_e}")
+                    log_message(f"更新夹爪开合状态失败: {grip_e}", "warning")
             # ------- END -------
 
             # 所有数据验证通过，添加帧到数据集
@@ -526,22 +504,22 @@ class PiperRealDataRecorder:
                     
                     # 每20帧输出一次详细信息
                     if self.frame_count % 20 == 0:
-                        logger.info(f"✅ Recorded {self.frame_count} frames (Episode {self.episode_count})")
+                        log_message(f"✅ Recorded {self.frame_count} frames (Episode {self.episode_count})", "success")
                     
                     return True
                 else:
                     # 数据集添加失败，但不要过于频繁地记录错误
                     if self.frame_count % 10 == 0:
-                        logger.warning(f"Failed to add frame data to dataset (Recorded {self.frame_count} frames)")
+                        log_message(f"Failed to add frame data to dataset (Recorded {self.frame_count} frames)", "warning")
                     return False
                     
             except Exception as dataset_e:
-                logger.error(f"Dataset add frame exception: {dataset_e}")
+                log_message(f"Dataset add frame exception: {dataset_e}", "error")
                 return False
                 
         except Exception as e:
-            logger.error(f"Record frame unknown exception: {e}")
-            logger.error(f"Exception type: {type(e).__name__}")
+            log_message(f"Record frame unknown exception: {e}", "error")
+            log_message(f"Exception type: {type(e).__name__}", "error")
             return False
     
     def calculate_fps(self):
@@ -555,7 +533,7 @@ class PiperRealDataRecorder:
     
     def run_main_loop(self):
         """运行主循环"""
-        logger.info("🚀 Start running main loop")
+        log_message("🚀 Start running main loop", "info")
         self.running = True
         
         while self.running:
@@ -578,15 +556,15 @@ class PiperRealDataRecorder:
                 time.sleep(1.0 / self.args.fps)
                 
             except KeyboardInterrupt:
-                logger.info("Received interrupt signal, exiting...")
+                log_message("Received interrupt signal, exiting...", "info")
                 break
             except Exception as e:
-                logger.error(f"Main loop error: {e}")
+                log_message(f"Main loop error: {e}", "error")
                 break
     
     def shutdown(self):
         """安全关闭"""
-        logger.info("Shutting down system...")
+        log_message("Shutting down system...", "info")
         
         self.running = False
         
@@ -611,11 +589,11 @@ class PiperRealDataRecorder:
         if self.dataset_manager:
             self.dataset_manager.cleanup()
         
-        logger.info("✅ System shut down")
+        log_message("✅ System shut down", "success")
     
     def run(self):
         """运行录制器"""
-        logger.info("Start Piper robot data recording system")
+        log_message("Start Piper robot data recording system", "info")
         
         # 设置信号处理器
         self.setup_signal_handlers()
@@ -632,24 +610,24 @@ class PiperRealDataRecorder:
         ]
         
         for step_name, init_func in init_steps:
-            logger.info(f"Initializing {step_name}...")
+            log_message(f"Initializing {step_name}...", "info")
             if not init_func():
-                logger.error(f"{step_name} initialization failed")
+                log_message(f"{step_name} initialization failed", "error")
                 # 对于某些非关键组件，可以继续运行
                 if step_name in ["Camera system", "Gamepad controller"]:
-                    logger.warning(f"Skipping {step_name}, continue running...")
+                    log_message(f"Skipping {step_name}, continue running...", "warning")
                     continue
                 else:
                     self.shutdown()
                     return False
         
-        logger.info("🎉 All components initialized, start running...")
+        log_message("🎉 All components initialized, start running...", "success")
         
         try:
             # 运行主循环
             self.run_main_loop()
         except Exception as e:
-            logger.error(f"Runtime error: {e}")
+            log_message(f"Runtime error: {e}", "error")
         finally:
             self.shutdown()
         
@@ -684,12 +662,12 @@ def main():
     try:
         success = recorder.run()
         if success:
-            logger.info("🎉 Data recording completed")
+            log_message("🎉 Data recording completed", "success")
         else:
-            logger.error("❌ Data recording failed")
+            log_message("❌ Data recording failed", "error")
             sys.exit(1)
     except Exception as e:
-        logger.error(f"Program failed: {e}")
+        log_message(f"Program failed: {e}", "error")
         sys.exit(1)
 
 

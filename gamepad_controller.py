@@ -9,19 +9,9 @@ import numpy as np
 import threading
 import time
 from typing import Tuple, Callable, Optional
-from rich.console import Console
-from rich.logging import RichHandler
-import logging
 
-# 配置rich日志
-console = Console()
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[RichHandler(console=console, rich_tracebacks=True)]
-)
-logger = logging.getLogger("GamepadController")
+# 导入全局日志管理器
+from global_logger import log_message, log_info, log_warning, log_error, log_success
 
 class GamepadController:
     """手柄控制器，集成录制功能"""
@@ -79,10 +69,10 @@ class GamepadController:
             self.joystick = pygame.joystick.Joystick(0)
             self.joystick.init()
             
-            logger.info(f"✅ 手柄初始化成功: {self.joystick.get_name()}")
+            log_message(f"✅ 手柄初始化成功: {self.joystick.get_name()}", "success", "Gamepad")
             
         except Exception as e:
-            logger.error(f"❌ 手柄初始化失败: {e}")
+            log_message(f"❌ 手柄初始化失败: {e}", "error", "Gamepad")
             raise
     
     def set_movement_callback(self, callback: Callable[[np.ndarray, float, float], None]):
@@ -189,31 +179,31 @@ class GamepadController:
             self.on_grip_callback(self.grip_toggle)
         
         if self.on_record_start_callback and self.record_toggle:
-            logger.info("🎮 检测到Y键按下，开始录制")
+            log_message("🎮 检测到Y键按下，开始录制", "info", "Gamepad")
             self.is_recording = True
             self.on_record_start_callback()
         
         if self.on_record_stop_callback and self.stop_record_toggle:
-            logger.info("🎮 检测到X键按下，停止录制")
+            log_message("🎮 检测到X键按下，停止录制", "info", "Gamepad")
             self.is_recording = False
             self.on_record_stop_callback()
     
     def start(self):
         """启动手柄控制"""
         if self.joystick is None:
-            logger.error("手柄未初始化")
+            log_message("手柄未初始化", "error", "Gamepad")
             return False
         
         self.running = True
-        logger.info("🎮 手柄控制已启动")
-        logger.info("🎮 控制说明:")
-        logger.info("   左摇杆: XY平移")
-        logger.info("   LT/RT: Z轴平移")
-        logger.info("   右摇杆Y: 关节5控制")
-        logger.info("   LB/RB: 关节6控制")
-        logger.info("   A键: 夹爪开合")
-        logger.info("   Y键: 开始录制")
-        logger.info("   X键: 停止录制")
+        log_message("🎮 手柄控制已启动", "info", "Gamepad")
+        log_message("🎮 控制说明:", "info", "Gamepad")
+        log_message("   左摇杆: XY平移", "info", "Gamepad")
+        log_message("   LT/RT: Z轴平移", "info", "Gamepad")
+        log_message("   右摇杆Y: 关节5控制", "info", "Gamepad")
+        log_message("   LB/RB: 关节6控制", "info", "Gamepad")
+        log_message("   A键: 夹爪开合", "info", "Gamepad")
+        log_message("   Y键: 开始录制", "info", "Gamepad")
+        log_message("   X键: 停止录制", "info", "Gamepad")
         
         return True
     
@@ -223,7 +213,7 @@ class GamepadController:
         if self.joystick:
             self.joystick.quit()
         pygame.quit()
-        logger.info("🎮 手柄控制已停止")
+        log_message("🎮 手柄控制已停止", "info", "Gamepad")
     
     def get_current_input(self) -> dict:
         """获取当前输入状态"""
@@ -263,7 +253,7 @@ class ThreadedGamepadController(GamepadController):
         self.control_thread = threading.Thread(target=self._control_loop, daemon=True)
         self.control_thread.start()
         
-        logger.info("🎮 多线程手柄控制已启动")
+        log_message("🎮 多线程手柄控制已启动", "info", "Gamepad")
         return True
     
     def stop_threaded(self):
@@ -272,7 +262,7 @@ class ThreadedGamepadController(GamepadController):
         if self.control_thread and self.control_thread.is_alive():
             self.control_thread.join()
         self.stop()
-        logger.info("🎮 多线程手柄控制已停止")
+        log_message("🎮 多线程手柄控制已停止", "info", "Gamepad")
     
     def get_current_input_safe(self) -> dict:
         """线程安全地获取当前输入状态"""
@@ -282,19 +272,19 @@ class ThreadedGamepadController(GamepadController):
 
 def test_gamepad_controller():
     """测试手柄控制器"""
-    logger.info("开始测试手柄控制器")
+    log_message("开始测试手柄控制器", "info", "Gamepad")
     
     def on_movement(delta_pos, joint5_delta, joint6_delta):
-        logger.info(f"Movement: pos={delta_pos}, j5={joint5_delta:.3f}, j6={joint6_delta:.3f}")
+        log_message(f"Movement: pos={delta_pos}, j5={joint5_delta:.3f}, j6={joint6_delta:.3f}", "info", "Gamepad")
     
     def on_grip(toggle):
-        logger.info(f"Gripper toggle: {toggle}")
+        log_message(f"Gripper toggle: {toggle}", "info", "Gamepad")
     
     def on_record_start():
-        logger.info("📹 Start recording")
+        log_message("📹 Start recording", "info", "Gamepad")
     
     def on_record_stop():
-        logger.info("⏹️ Stop recording")
+        log_message("⏹️ Stop recording", "info", "Gamepad")
     
     try:
         # 创建手柄控制器
@@ -308,10 +298,10 @@ def test_gamepad_controller():
         
         # 启动控制
         if not controller.start():
-            logger.error("启动手柄控制失败")
+            log_message("启动手柄控制失败", "error", "Gamepad")
             return
         
-        logger.info("手柄控制测试运行中，按Ctrl+C退出...")
+        log_message("手柄控制测试运行中，按Ctrl+C退出...", "info", "Gamepad")
         
         # 主循环
         try:
@@ -319,15 +309,15 @@ def test_gamepad_controller():
                 controller.update()
                 time.sleep(0.02)
         except KeyboardInterrupt:
-            logger.info("收到中断信号")
+            log_message("收到中断信号", "info", "Gamepad")
         
     except Exception as e:
-        logger.error(f"测试过程中出错: {e}")
+        log_message(f"测试过程中出错: {e}", "error", "Gamepad")
     
     finally:
         if 'controller' in locals():
             controller.stop()
-        logger.info("测试结束")
+        log_message("测试结束", "info", "Gamepad")
 
 
 if __name__ == "__main__":
