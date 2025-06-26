@@ -11,3 +11,4 @@ lerobot/
 __pycache__/
 *.parquet
 piper_real_dataset/
+vla/

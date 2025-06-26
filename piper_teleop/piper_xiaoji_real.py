@@ -61,7 +61,7 @@ def enable_fun(piper: C_PiperInterface_V2):
 
 
 class PiperController:
-    def __init__(self, piper, scene, cams=[], lock=None):
+    def __init__(self, piper, scene, cams=[], lock=None, use_external_gamepad=False):
         self.piper = piper
         self.target_qpos = piper.get_qpos().clone()
         self.control_qlimit = piper.get_dofs_limit()
@@ -71,13 +71,18 @@ class PiperController:
         self.scene = scene
         self.running = True
         self.piper_real = C_PiperInterface_V2("can0")
+        self.use_external_gamepad = use_external_gamepad
         
-        # 初始化 Pygame 手柄
-        pygame.init()
-        if pygame.joystick.get_count() == 0:
-            raise RuntimeError("未检测到游戏手柄！")
-        self.joystick = pygame.joystick.Joystick(0)
-        self.joystick.init()
+        # 只有不使用外部手柄时才初始化pygame
+        if not use_external_gamepad:
+            # 初始化 Pygame 手柄
+            pygame.init()
+            if pygame.joystick.get_count() == 0:
+                raise RuntimeError("未检测到游戏手柄！")
+            self.joystick = pygame.joystick.Joystick(0)
+            self.joystick.init()
+        else:
+            self.joystick = None
         
         # 控制参数
         self.pos_scale = 0.01
@@ -155,7 +160,10 @@ class PiperController:
         self.joint5_angle = current_qpos[4]
         self.joint6_angle = current_qpos[5]
         
-        threading.Thread(target=self._run_joystick_loop, daemon=True).start()
+        # 只有不使用外部手柄时才启动内部手柄循环
+        if not self.use_external_gamepad:
+            threading.Thread(target=self._run_joystick_loop, daemon=True).start()
+        
         self.running = True
 
     def _run_joystick_loop(self):
@@ -169,6 +177,10 @@ class PiperController:
 
     def read_joystick_inputs(self):
         """读取手柄输入并转换为控制信号"""
+        if self.joystick is None:
+            # 如果没有内部手柄，返回空值
+            return np.zeros(3, dtype=np.float32), 0.0, 0.0, False
+        
         # 左摇杆: XY平移
         lx = -self.joystick.get_axis(1)
         ly = -self.joystick.get_axis(0)
@@ -212,76 +224,84 @@ class PiperController:
 
     def handle_joystick_input(self):
         """处理手柄输入事件"""
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.running = False
-                return
+        try:
+            # 清理pygame事件队列但不处理退出事件
+            pygame.event.pump()
 
-        with self.lock:
-            # 获取手柄输入
-            delta_pos, joint5_delta, joint6_delta, grip_toggle = self.read_joystick_inputs()
+            with self.lock:
+                # 获取手柄输入
+                delta_pos, joint5_delta, joint6_delta, grip_toggle = self.read_joystick_inputs()
             
-            # 检查是否有有效的输入变化
-            has_pos_change = np.any(np.abs(delta_pos) > 0.001)
-            has_joint5_change = abs(joint5_delta) > 0.001
-            has_joint6_change = abs(joint6_delta) > 0.001
-            
-            if has_pos_change or has_joint5_change or has_joint6_change or grip_toggle:
-                # 打印状态
-                self.print_status(delta_pos, joint5_delta, joint6_delta)
+                # 检查是否有有效的输入变化
+                has_pos_change = np.any(np.abs(delta_pos) > 0.001)
+                has_joint5_change = abs(joint5_delta) > 0.001
+                has_joint6_change = abs(joint6_delta) > 0.001
                 
-                # 获取末端执行器当前位置
-                end_effector = self.piper.get_link("link6")
-                current_pos = end_effector.get_pos().cpu().numpy().copy()
-                
-                if has_pos_change:
-                    new_pos = current_pos + delta_pos
-                else:
-                    new_pos = current_pos
-                
-                # 更新关节角度
-                self.joint5_angle += joint5_delta
-                self.joint6_angle += joint6_delta
-                
-                # 限制关节角度范围
-                if hasattr(self.control_qlimit, 'cpu'):
-                    qlimit = self.control_qlimit.cpu().numpy()
-                else:
-                    lower_limits, upper_limits = self.control_qlimit
-                    if hasattr(lower_limits, 'cpu'):
-                        lower_limits = lower_limits.cpu().numpy()
-                        upper_limits = upper_limits.cpu().numpy()
-                    qlimit = np.array([lower_limits, upper_limits])
-                
-                self.joint5_angle = np.clip(self.joint5_angle, qlimit[0, 4], qlimit[1, 4])
-                self.joint6_angle = np.clip(self.joint6_angle, qlimit[0, 5], qlimit[1, 5])
-                
-                # 切换夹爪状态
-                if grip_toggle:
-                    self.is_grasp = not self.is_grasp
-                    if self.is_grasp:
-                        self.piper_real.GripperCtrl(0, 1000, 0x01, 0)
+                if has_pos_change or has_joint5_change or has_joint6_change or grip_toggle:
+                    # 打印状态
+                    self.print_status(delta_pos, joint5_delta, joint6_delta)
+                    
+                    # 获取末端执行器当前位置
+                    end_effector = self.piper.get_link("link6")
+                    current_pos = end_effector.get_pos().cpu().numpy().copy()
+                    
+                    if has_pos_change:
+                        new_pos = current_pos + delta_pos
                     else:
-                        self.piper_real.GripperCtrl(5000 * 1000, 1000, 0x01, 0)
+                        new_pos = current_pos
+                    
+                    # 更新关节角度
+                    self.joint5_angle += joint5_delta
+                    self.joint6_angle += joint6_delta
                 
-                # 使用逆运动学计算
-                try:
-                    new_qpos = self.piper.inverse_kinematics(
-                        link=end_effector, 
-                        pos=new_pos
-                    )
+                    # 限制关节角度范围
+                    if hasattr(self.control_qlimit, 'cpu'):
+                        qlimit = self.control_qlimit.cpu().numpy()
+                    else:
+                        lower_limits, upper_limits = self.control_qlimit
+                        if hasattr(lower_limits, 'cpu'):
+                            lower_limits = lower_limits.cpu().numpy()
+                            upper_limits = upper_limits.cpu().numpy()
+                        qlimit = np.array([lower_limits, upper_limits])
                     
-                    target_qpos = new_qpos.clone()
-                    target_qpos[4] = self.joint5_angle
-                    target_qpos[5] = self.joint6_angle
-                    
-                    self.update_dofs_position(target_qpos, self.dofs_idx)
-                    
-                except Exception as e:
-                    console.print(f"[red]IK求解失败: {e}[/red]")
+                    self.joint5_angle = np.clip(self.joint5_angle, qlimit[0, 4], qlimit[1, 4])
+                    self.joint6_angle = np.clip(self.joint6_angle, qlimit[0, 5], qlimit[1, 5])
                 
-                self.run_sim()
-                self.move_joint_real(self.piper.get_qpos()[:6].cpu().numpy())
+                    # 切换夹爪状态
+                    if grip_toggle:
+                        self.is_grasp = not self.is_grasp
+                        if self.is_grasp:
+                            self.piper_real.GripperCtrl(0, 1000, 0x01, 0)
+                        else:
+                            self.piper_real.GripperCtrl(5000 * 1000, 1000, 0x01, 0)
+                
+                    # 使用逆运动学计算
+                    try:
+                        new_qpos = self.piper.inverse_kinematics(
+                            link=end_effector, 
+                            pos=new_pos
+                        )
+                        
+                        target_qpos = new_qpos.clone()
+                        target_qpos[4] = self.joint5_angle
+                        target_qpos[5] = self.joint6_angle
+                        
+                        self.update_dofs_position(target_qpos, self.dofs_idx)
+                        
+                    except Exception as e:
+                        console.print(f"[red]IK求解失败: {e}[/red]")
+                    
+                    try:
+                        self.run_sim()
+                        self.move_joint_real(self.piper.get_qpos()[:6].cpu().numpy())
+                    except Exception as e:
+                        # 忽略关节范围错误，避免影响录制
+                        if "out of range" not in str(e):
+                            console.print(f"[yellow]控制警告: {e}[/yellow]")
+        except Exception as e:
+            # 全局异常处理，避免任何错误导致程序停止
+            if "out of range" not in str(e):
+                console.print(f"[yellow]手柄输入处理错误: {e}[/yellow]")
 
     def update_dofs_position(self, target_qpos, dofs_idx):
         """更新关节位置"""
@@ -323,9 +343,91 @@ class PiperController:
 
     def move_joint_real(self, target_joints):
         """移动指定关节到目标位置"""
-        factor = 57295.7795
-        joints = [0] * 6
-        for i in range(0, 6):
-            joints[i] = round(target_joints[i] * factor)
-        self.piper_real.MotionCtrl_2(0x01, 0x01, 100, 0x00)
-        self.piper_real.JointCtrl(joints[0], joints[1], joints[2], joints[3], joints[4], joints[5])
+        try:
+            factor = 57295.7795
+            joints = [0] * 6
+            for i in range(0, 6):
+                joints[i] = round(target_joints[i] * factor)
+            self.piper_real.MotionCtrl_2(0x01, 0x01, 100, 0x00)
+            self.piper_real.JointCtrl(joints[0], joints[1], joints[2], joints[3], joints[4], joints[5])
+        except Exception as e:
+            # 忽略关节控制错误，避免影响录制
+            if "out of range" in str(e):
+                pass  # 忽略关节范围错误
+            else:
+                console.print(f"[yellow]关节控制警告: {e}[/yellow]")
+
+    def handle_external_gamepad_input(self, delta_pos, joint5_delta, joint6_delta, grip_toggle):
+        """处理外部手柄输入"""
+        try:
+            with self.lock:
+                # 检查是否有有效的输入变化
+                has_pos_change = np.any(np.abs(delta_pos) > 0.001)
+                has_joint5_change = abs(joint5_delta) > 0.001
+                has_joint6_change = abs(joint6_delta) > 0.001
+                
+                if has_pos_change or has_joint5_change or has_joint6_change or grip_toggle:
+                    # 打印状态
+                    self.print_status(delta_pos, joint5_delta, joint6_delta)
+                    
+                    # 获取末端执行器当前位置
+                    end_effector = self.piper.get_link("link6")
+                    current_pos = end_effector.get_pos().cpu().numpy().copy()
+                    
+                    if has_pos_change:
+                        new_pos = current_pos + delta_pos
+                    else:
+                        new_pos = current_pos
+                    
+                    # 更新关节角度
+                    self.joint5_angle += joint5_delta
+                    self.joint6_angle += joint6_delta
+                
+                    # 限制关节角度范围
+                    if hasattr(self.control_qlimit, 'cpu'):
+                        qlimit = self.control_qlimit.cpu().numpy()
+                    else:
+                        lower_limits, upper_limits = self.control_qlimit
+                        if hasattr(lower_limits, 'cpu'):
+                            lower_limits = lower_limits.cpu().numpy()
+                            upper_limits = upper_limits.cpu().numpy()
+                        qlimit = np.array([lower_limits, upper_limits])
+                    
+                    self.joint5_angle = np.clip(self.joint5_angle, qlimit[0, 4], qlimit[1, 4])
+                    self.joint6_angle = np.clip(self.joint6_angle, qlimit[0, 5], qlimit[1, 5])
+                
+                    # 切换夹爪状态
+                    if grip_toggle:
+                        self.is_grasp = not self.is_grasp
+                        if self.is_grasp:
+                            self.piper_real.GripperCtrl(0, 1000, 0x01, 0)
+                        else:
+                            self.piper_real.GripperCtrl(5000 * 1000, 1000, 0x01, 0)
+                
+                    # 使用逆运动学计算
+                    try:
+                        new_qpos = self.piper.inverse_kinematics(
+                            link=end_effector, 
+                            pos=new_pos
+                        )
+                        
+                        target_qpos = new_qpos.clone()
+                        target_qpos[4] = self.joint5_angle
+                        target_qpos[5] = self.joint6_angle
+                        
+                        self.update_dofs_position(target_qpos, self.dofs_idx)
+                        
+                    except Exception as e:
+                        console.print(f"[red]IK求解失败: {e}[/red]")
+                    
+                    try:
+                        self.run_sim()
+                        self.move_joint_real(self.piper.get_qpos()[:6].cpu().numpy())
+                    except Exception as e:
+                        # 忽略关节范围错误，避免影响录制
+                        if "out of range" not in str(e):
+                            console.print(f"[yellow]控制警告: {e}[/yellow]")
+        except Exception as e:
+            # 全局异常处理，避免任何错误导致程序停止
+            if "out of range" not in str(e):
+                console.print(f"[yellow]外部手柄输入处理错误: {e}[/yellow]")
