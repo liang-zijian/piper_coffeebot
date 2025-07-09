@@ -50,6 +50,27 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
             raise RuntimeError(f"Error in inference server:\n{response}")
         return msgpack_numpy.unpackb(response)
 
+    def infer_guided(self, obs: Dict, prev_actions, d: int, s: int, 
+                     prefix_attention_schedule: str = "exp", max_guidance_weight: float = 5.0) -> Dict:  # noqa: UP006
+        """Guided inference for RTC with previous actions."""
+        # Package guided inference request
+        request = {
+            "type": "guided_inference",
+            "obs": obs,
+            "prev_actions": prev_actions,
+            "d": d,
+            "s": s,
+            "prefix_attention_schedule": prefix_attention_schedule,
+            "max_guidance_weight": max_guidance_weight
+        }
+        data = self._packer.pack(request)
+        self._ws.send(data)
+        response = self._ws.recv()
+        if isinstance(response, str):
+            # we're expecting bytes; if the server sends a string, it's an error.
+            raise RuntimeError(f"Error in guided inference server:\n{response}")
+        return msgpack_numpy.unpackb(response)
+
     @override
     def reset(self) -> None:
         pass

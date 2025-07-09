@@ -55,10 +55,33 @@ class WebsocketPolicyServer:
         while True:
             try:
                 start_time = time.monotonic()
-                obs = msgpack_numpy.unpackb(await websocket.recv())
+                request = msgpack_numpy.unpackb(await websocket.recv())
 
                 infer_time = time.monotonic()
-                action = self._policy.infer(obs)
+                
+                # Check if this is a guided inference request
+                if isinstance(request, dict) and request.get("type") == "guided_inference":
+                    # Handle guided inference
+                    obs = request["obs"]
+                    prev_actions = request["prev_actions"]
+                    d = request["d"]
+                    s = request["s"]
+                    prefix_attention_schedule = request.get("prefix_attention_schedule", "exp")
+                    max_guidance_weight = request.get("max_guidance_weight", 5.0)
+                    
+                    if hasattr(self._policy, 'infer_guided'):
+                        action = self._policy.infer_guided(
+                            obs, prev_actions, d, s, 
+                            prefix_attention_schedule=prefix_attention_schedule,
+                            max_guidance_weight=max_guidance_weight
+                        )
+                    else:
+                        # Fallback to regular inference if guided inference not available
+                        action = self._policy.infer(obs)
+                else:
+                    # Regular inference
+                    action = self._policy.infer(request)
+                    
                 infer_time = time.monotonic() - infer_time
 
                 action["server_timing"] = {

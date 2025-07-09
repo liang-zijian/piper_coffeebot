@@ -37,6 +37,14 @@ class Policy(BasePolicy):
         self._rng = rng or jax.random.key(0)
         self._sample_kwargs = sample_kwargs or {}
         self._metadata = metadata or {}
+        
+        # Add guided inference capability for RTC
+        if hasattr(model, 'sample_actions_guided'):
+            # Mark string parameters as static for JIT compilation
+            self._sample_actions_guided = nnx_utils.module_jit(
+                model.sample_actions_guided, 
+                static_argnames=('prefix_attention_schedule',)
+            )
 
     @override
     def infer(self, obs: dict) -> dict:  # type: ignore[misc]
@@ -53,6 +61,50 @@ class Policy(BasePolicy):
             "actions": self._sample_actions(sample_rng, _model.Observation.from_dict(inputs), **self._sample_kwargs),
         }
         # Unbatch and convert to np.ndarray.        # Unbatch and convert to np.ndarray.
+        outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
+        model_time = time.monotonic() - start_time
+
+        outputs = self._output_transform(outputs)
+        outputs["policy_timing"] = {
+            "infer_ms": model_time * 1000,
+        }
+        return outputs
+
+    def infer_guided(self, obs: dict, prev_actions: np.ndarray, d: int, s: int, 
+                     prefix_attention_schedule: str = "exp", max_guidance_weight: float = 5.0) -> dict:
+        """Guided inference for RTC with previous actions."""
+        if not hasattr(self, '_sample_actions_guided'):
+            raise ValueError("Model does not support guided inference")
+            
+        # Make a copy since transformations may modify the inputs in place.
+        inputs = jax.tree.map(lambda x: x, obs)
+        inputs = self._input_transform(inputs)
+        # Make a batch and convert to jax.Array.
+        inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
+        prev_actions_jax = jnp.asarray(prev_actions)[np.newaxis, ...]
+
+        start_time = time.monotonic()
+        self._rng, sample_rng = jax.random.split(self._rng)
+        
+        # Merge sample_kwargs with RTC-specific parameters
+        rtc_kwargs = self._sample_kwargs.copy()
+        rtc_kwargs.update({
+            'prefix_attention_schedule': prefix_attention_schedule,
+            'max_guidance_weight': max_guidance_weight
+        })
+        
+        outputs = {
+            "state": inputs["state"],
+            "actions": self._sample_actions_guided(
+                sample_rng, 
+                _model.Observation.from_dict(inputs), 
+                prev_actions_jax,
+                d, 
+                s,
+                **rtc_kwargs
+            ),
+        }
+        # Unbatch and convert to np.ndarray.
         outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
         model_time = time.monotonic() - start_time
 

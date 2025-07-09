@@ -1,8 +1,5 @@
 import dataclasses
-import functools
 import logging
-from typing import Literal
-import numpy as np
 
 import einops
 import flax.nnx as nnx
@@ -18,34 +15,6 @@ from openpi.shared import array_typing as at
 import openpi.shared.nnx_utils as nnx_utils
 
 logger = logging.getLogger("openpi")
-
-PrefixAttentionSchedule = Literal["linear", "exp", "ones", "zeros"]
-
-
-def get_prefix_weights(start: int, end: int, total: int, schedule: PrefixAttentionSchedule) -> jax.Array:
-    """With start=2, end=6, total=10, the output will be:
-    1  1  4/5 3/5 2/5 1/5 0  0  0  0
-           ^              ^
-         start           end
-    `start` (inclusive) is where the chunk starts being allowed to change. `end` (exclusive) is where the chunk stops
-    paying attention to the prefix. if start == 0, then the entire chunk is allowed to change. if end == total, then the
-    entire prefix is attended to.
-
-    `end` takes precedence over `start` in the sense that, if `end < start`, then `start` is pushed down to `end`. Thus,
-    if `end` is 0, then the entire prefix will always be ignored.
-    """
-    start = jnp.minimum(start, end)
-    if schedule == "ones":
-        w = jnp.ones(total)
-    elif schedule == "zeros":
-        w = (jnp.arange(total) < start).astype(jnp.float32)
-    elif schedule == "linear" or schedule == "exp":
-        w = jnp.clip((start - 1 - jnp.arange(total)) / (end - start + 1) + 1, 0, 1)
-        if schedule == "exp":
-            w = w * jnp.expm1(w) / (jnp.e - 1)
-    else:
-        raise ValueError(f"Invalid schedule: {schedule}")
-    return jnp.where(jnp.arange(total) >= end, 0, w)
 
 
 def make_attn_mask(input_mask, mask_ar):
@@ -304,36 +273,6 @@ class Pi0(_model.BaseModel):
         *,
         num_steps: int | at.Int[at.Array, ""] = 10,
     ) -> _model.Actions:
-        """Standard flow matching inference."""
-        return self._sample_actions_internal(rng, observation, num_steps=num_steps)
-    
-    def sample_actions_guided(
-        self,
-        rng: at.KeyArrayLike,
-        observation: _model.Observation,
-        prev_actions: _model.Actions,
-        d: int,
-        s: int,
-        *,
-        num_steps: int | at.Int[at.Array, ""] = 10,
-        prefix_attention_schedule: PrefixAttentionSchedule = "exp",
-        max_guidance_weight: float = 5.0,
-    ) -> _model.Actions:
-        """RTC guided inference with ΠGDM inpainting."""
-        return self._sample_actions_guided_internal(
-            rng, observation, prev_actions, d, s, 
-            num_steps=num_steps, 
-            prefix_attention_schedule=prefix_attention_schedule,
-            max_guidance_weight=max_guidance_weight
-        )
-    
-    def _sample_actions_internal(
-        self,
-        rng: at.KeyArrayLike,
-        observation: _model.Observation,
-        *,
-        num_steps: int | at.Int[at.Array, ""] = 10,
-    ) -> _model.Actions:
         observation = _model.preprocess_observation(None, observation, train=False)
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
         # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
@@ -374,9 +313,7 @@ class Pi0(_model.BaseModel):
             )
             assert prefix_out is None
             v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
-            # with np.printoptions(threshold=np.inf, linewidth=2000):
-            #     jax.debug.print("**BEGINE** x: {x}",
-            #         x=x_t + dt * v_t)
+
             return x_t + dt * v_t, time + dt
 
         def cond(carry):
@@ -385,109 +322,4 @@ class Pi0(_model.BaseModel):
             return time >= -dt / 2
 
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
-        return x_0
-    
-    
-    def _sample_actions_guided_internal(
-        self,
-        rng: at.KeyArrayLike,
-        observation: _model.Observation,
-        prev_actions: _model.Actions,
-        d: int,
-        s: int,
-        *,
-        num_steps: int | at.Int[at.Array, ""] = 10,
-        prefix_attention_schedule: PrefixAttentionSchedule = "exp",
-        max_guidance_weight: float = 5.0,
-    ) -> _model.Actions:
-        """Guided inference with ΠGDM for RTC (matches official implementation)."""
-        observation = _model.preprocess_observation(None, observation, train=False)
-        dt = -1.0 / num_steps
-        batch_size = observation.state.shape[0]
-        H = self.action_horizon
-        
-        # Initialize with noise
-        noise = jax.random.normal(rng, (batch_size, H, self.action_dim))
-        
-        # Fill KV cache with prefix
-        prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
-        prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
-        positions = jnp.cumsum(prefix_mask, axis=1) - 1
-        _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
-        
-        # Ensure prev_actions has correct shape
-        if prev_actions.shape[-1] < self.action_dim:
-            pad_c = self.action_dim - prev_actions.shape[-1]
-            prev_actions = jnp.pad(prev_actions, ((0, 0), (0, 0), (0, pad_c)))
-        
-        # Compute prefix attention horizon (H - s)
-        prefix_attention_horizon = H - s
-        
-        def step(carry):
-            # carry 现在包含 (x_t, time, step_idx)
-            x_t, time, step_idx = carry
-            
-            # Define the denoiser function that operates on the full batch
-            def denoiser_batch(x_t_batch):
-                # Embed suffix for the batch
-                suffix_tokens, suffix_mask, suffix_ar_mask = self.embed_suffix(
-                    observation, x_t_batch, jnp.broadcast_to(time, batch_size)
-                )
-                suffix_attn_mask = make_attn_mask(suffix_mask, suffix_ar_mask)
-                prefix_attn_mask_expanded = einops.repeat(
-                    prefix_mask, "b p -> b s p", s=suffix_tokens.shape[1]
-                )
-                full_attn_mask = jnp.concatenate(
-                    [prefix_attn_mask_expanded, suffix_attn_mask], axis=-1
-                )
-                positions_local = jnp.sum(prefix_mask, axis=-1)[:, None] + jnp.cumsum(
-                    suffix_mask, axis=-1
-                ) - 1
-                
-                (_, suffix_out), _ = self.PaliGemma.llm(
-                    [None, suffix_tokens], 
-                    mask=full_attn_mask, 
-                    positions=positions_local, 
-                    kv_cache=kv_cache
-                )
-                v_t = self.action_out_proj(suffix_out[:, -H:])
-                # return x_t_batch + v_t * (1 - time), v_t # original pi0
-                return x_t_batch - v_t*time, v_t # when t=0, A_t = A_final(A_0)
-            
-            # Compute guided velocity using VJP
-            # x_0: estimated action for t=0 (final)
-            x_0, vjp_fun, v_t = jax.vjp(denoiser_batch, x_t, has_aux=True)
-            
-            # Compute prefix weights
-            weights = get_prefix_weights(
-                d, prefix_attention_horizon, H, prefix_attention_schedule
-            )
-            weights_batch = weights[None, :, None]  # Broadcast to [batch, H, 1]
-            
-            # Compute error and apply weights
-            #dim_mask = jnp.concatenate([jnp.ones(8), jnp.zeros(24)])[None,None,:]
-            error = (prev_actions - x_0) * weights_batch 
-            
-            # Get gradient through VJP
-            pinv_correction = vjp_fun(error)[0]  # gradient of the first input of the denoiser
-
-            inv_r2 = ((1 - time) ** 2 + time ** 2) / (time ** 2)
-            c = jnp.nan_to_num(time / (1 - time), posinf=max_guidance_weight)
-            guidance_weight = jnp.minimum(c * inv_r2, max_guidance_weight)
-            
-            decay_factor = 0.8 
-            # scheduled_coef = 0.05 * jnp.power(decay_factor, step_idx.astype(x_t.dtype))
-            v_t_guided = v_t - decay_factor * guidance_weight * pinv_correction  
-            
-            # 返回新的 (x_t, time, step_idx)
-            return (x_t + dt * v_t_guided, time + dt, step_idx + 1)
-        
-        def cond(carry):
-            # 与 step 保持一致的拆包方式
-            x_t, time, _ = carry
-            return time >= -dt / 2
-        
-        init_carry = (noise, jnp.asarray(1.0, dtype=noise.dtype), jnp.array(0, dtype=jnp.int32))
-
-        x_0, _, _ = jax.lax.while_loop(cond, step, init_carry)  # from t=1 to t=0
         return x_0
