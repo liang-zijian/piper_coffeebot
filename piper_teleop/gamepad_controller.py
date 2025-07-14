@@ -11,7 +11,7 @@ import time
 from typing import Tuple, Callable, Optional
 
 # 导入全局日志管理器
-from .global_logger import log_message, log_info, log_warning, log_error, log_success
+from global_logger import log_message, log_info, log_warning, log_error, log_success
 
 class GamepadController:
     """手柄控制器，集成录制功能"""

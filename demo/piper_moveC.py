@@ -41,9 +41,9 @@ def enable_fun(piper:C_PiperInterface_V2):
             break
         time.sleep(1)
         pass
-    if(elapsed_time_flag):
-        print("程序自动使能超时,退出程序")
-        exit(0)
+    # if(elapsed_time_flag):
+    #     print("程序自动使能超时,退出程序")
+    #     exit(0)
 
 if __name__ == "__main__":
     piper = C_PiperInterface_V2("can0")

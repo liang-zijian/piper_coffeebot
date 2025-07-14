@@ -11,6 +11,8 @@ lerobot/
 __pycache__/
 *.parquet
 piper_real_dataset/
+piper_real_dataset_back/
 .venv/
+.claude/
 assets/
 vla/model/

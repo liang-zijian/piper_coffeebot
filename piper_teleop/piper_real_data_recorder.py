@@ -18,7 +18,7 @@ import genesis as gs
 from piper_xiaoji_real import PiperController
 
 # 导入全局日志管理器
-from .global_logger import log_message, log_info, log_warning, log_error, log_success, set_live_display
+from global_logger import log_message, log_info, log_warning, log_error, log_success, set_live_display
 
 # 导入自定义模块
 from multi_realsense_cameras import MultiRealSenseManager
@@ -127,9 +127,9 @@ class PiperRealDataRecorder:
             
             # 相机配置
             camera_configs = {
-                "ee_cam": {"width": 640, "height": 480, "fps": 30},
-                "rgb_rs_0": {"width": 640, "height": 480, "fps": 30},
-                "rgb_rs_1": {"width": 640, "height": 480, "fps": 30}
+                "ee_cam": {"width": 640, "height": 480, "fps": 30, "serial": "317222073629"},
+                "rgb_rs_0": {"width": 640, "height": 480, "fps": 30, "serial": "153122078525"},
+                "rgb_rs_1": {"width": 640, "height": 480, "fps": 30, "serial": "310222078614"}
             }
             
             self.camera_manager = MultiRealSenseManager(camera_configs)

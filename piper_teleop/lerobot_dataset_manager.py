@@ -13,7 +13,7 @@ import shutil
 from datetime import datetime
 from typing import Dict, Optional, Any
 # 导入全局日志管理器
-from .global_logger import log_message, log_info, log_warning, log_error, log_success
+from global_logger import log_message, log_info, log_warning, log_error, log_success
 
 # 导入lerobot相关模块
 try:
@@ -369,10 +369,12 @@ class LeRobotDatasetManager:
                 # 添加机械臂状态和动作
                 frame["observation.state"] = self.episode_robot_states[frame_idx]
                 frame["actions"] = self.episode_actions[frame_idx]
+                frame["task"] = self.episode_tasks[frame_idx]
                 
                 # 添加到数据集
                 try:
-                    self.dataset.add_frame(frame, self.episode_tasks[frame_idx])
+                    # self.dataset.add_frame(frame, self.episode_tasks[frame_idx])
+                    self.dataset.add_frame(frame)
                 except Exception as e:
                     log_message(f"❌ 添加帧 {frame_idx} 失败: {e}", "info", "LeRobot")
                     self._reset_episode_state()

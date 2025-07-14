@@ -340,8 +340,8 @@ def signal_handler(signum, frame):
     global should_exit
     should_exit = True
 
-def main(chunk_size: int = 50, use_rtc: bool = True, execution_range: int = 25,
-         prefix_attention_schedule: str = "exp", max_guidance_weight: float = 2) -> None:
+def main(chunk_size: int = 50, use_rtc: bool = False, execution_range: int = 25,
+         prefix_attention_schedule: str = "exp", max_guidance_weight: float = 1) -> None:
     """
     Args:
         chunk_size: how many actions to execute in one chunk (H parameter)
@@ -391,7 +391,7 @@ def main(chunk_size: int = 50, use_rtc: bool = True, execution_range: int = 25,
                     piper_vla_controller.update_last_action(action)
                 piper_vla_controller.update_state()
                 # Control loop frequency
-                time.sleep(0.06)
+                time.sleep(0.03)
             
             rtc_controller.stop()
                 

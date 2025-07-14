@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 from collections import deque
 
 # 导入全局日志管理器
-from .global_logger import log_message, log_info, log_warning, log_error, log_success
+from global_logger import log_message, log_info, log_warning, log_error, log_success
 
 class RobotStateRecorder:
     """机械臂状态记录器"""
