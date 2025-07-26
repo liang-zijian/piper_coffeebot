@@ -15,7 +15,7 @@ from modelscope.hub.api import HubApi
 
 # ---------- 可按需修改的参数 ----------
 REPO_ID = "Bits9600/piper_coffee_data"         # 目标仓库
-LOCAL_DIR = Path("/home/ubuntu/workspace/piper_ws/piper_real_dataset/data/chunk-000")
+LOCAL_DIR = Path("/home/ubuntu/workspace/piper_ws/piper_teleop/piper_real_dataset/data/chunk-000")
 DEST_DIR_IN_REPO = "data/chunk-000"            # 仓库内子目录
 START_IDX, END_IDX = 20, 91                    # episode_000020 ～ episode_000091
 REPO_TYPE = "dataset"                          # 如果是模型仓可改为 "model"
@@ -53,9 +53,9 @@ if __name__ == "__main__":
     api = HubApi()
     api.login(token)
     api.upload_folder(
-        repo_id="Bits9600/piper_coffee_data",
+        repo_id="Bits9600/pi0-coffee-200eps",
         repo_type="dataset",
-        folder_path="/home/ubuntu/workspace/piper_ws/piper_real_dataset/meta",
-        path_in_repo="meta",
-        commit_message="Add meta"
+        folder_path="/home/ubuntu/workspace/piper_ws/piper_teleop/piper_real_dataset/data",
+        path_in_repo="data",
+        commit_message="Add data"
     )

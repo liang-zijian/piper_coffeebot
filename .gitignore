@@ -8,6 +8,8 @@ lerobot/
 *.tar.lz4
 *.tar.zst
 *.tar.zstd
+*.pt
+*.zip
 __pycache__/
 *.parquet
 piper_real_dataset/
@@ -16,3 +18,5 @@ piper_real_dataset_back/
 .claude/
 assets/
 vla/model/
+action_plots/
+piper_sdk/

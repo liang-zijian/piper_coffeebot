@@ -271,7 +271,7 @@ class PiperController:
                     if grip_toggle:
                         self.is_grasp = not self.is_grasp
                         if self.is_grasp:
-                            self.piper_real.GripperCtrl(0, 1000, 0x01, 0)
+                            self.piper_real.GripperCtrl(0 * 1000, 1000, 0x01, 0)
                         else:
                             self.piper_real.GripperCtrl(5000 * 1000, 1000, 0x01, 0)
                 
@@ -400,7 +400,7 @@ class PiperController:
                     if grip_toggle:
                         self.is_grasp = not self.is_grasp
                         if self.is_grasp:
-                            self.piper_real.GripperCtrl(0, 1000, 0x01, 0)
+                            self.piper_real.GripperCtrl(0 * 1000, 100, 0x01, 0)
                         else:
                             self.piper_real.GripperCtrl(5000 * 1000, 1000, 0x01, 0)
                 

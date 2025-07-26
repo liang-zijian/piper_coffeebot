@@ -57,6 +57,12 @@ def enable_fun(piper:C_PiperInterface_V2, enable:bool):
     print(f"Returning response: {resp}")
     return resp
 
+def reset_arm(piper_instance):
+    print("Resetting arm...")
+    piper_instance.MotionCtrl_2(0x01, 0x01, 100, 0x00)
+    piper_instance.JointCtrl(0, 0, 0, 0, 0, 0)
+    time.sleep(2)
+
 # 测试代码
 if __name__ == "__main__":
     piper = C_PiperInterface_V2()

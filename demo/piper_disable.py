@@ -8,6 +8,12 @@ from typing import (
 import time
 from piper_sdk import *
 
+def reset_arm(piper_instance):
+    print("Resetting arm...")
+    piper_instance.MotionCtrl_2(0x01, 0x01, 100, 0x00)
+    piper_instance.JointCtrl(0, 0, 0, 0, 0, 0)
+    time.sleep(2)
+
 def enable_fun(piper:C_PiperInterface_V2, enable:bool):
     '''
     使能机械臂并检测使能状态,尝试5s,如果使能超时则退出程序
@@ -55,7 +61,9 @@ def enable_fun(piper:C_PiperInterface_V2, enable:bool):
         time.sleep(0.5)
     resp = enable_flag
     print(f"Returning response: {resp}")
+    # reset_arm(piper)
     return resp
+
 
 # 测试代码
 if __name__ == "__main__":

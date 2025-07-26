@@ -475,11 +475,10 @@ class Pi0(_model.BaseModel):
             c = jnp.nan_to_num(time / (1 - time), posinf=max_guidance_weight)
             guidance_weight = jnp.minimum(c * inv_r2, max_guidance_weight)
             
-            decay_factor = 0.8 
-            # scheduled_coef = 0.05 * jnp.power(decay_factor, step_idx.astype(x_t.dtype))
-            v_t_guided = v_t - decay_factor * guidance_weight * pinv_correction  
-            
-            # 返回新的 (x_t, time, step_idx)
+            decay_factor = 0.7
+            scheduled_coef = 0.9 * jnp.power(decay_factor, step_idx.astype(x_t.dtype))
+            v_t_guided = v_t - scheduled_coef * guidance_weight * pinv_correction
+
             return (x_t + dt * v_t_guided, time + dt, step_idx + 1)
         
         def cond(carry):
