@@ -187,15 +187,15 @@ class PiperController:
         
         # 右摇杆
         rx = -self.joystick.get_axis(3)
-        ry = self.joystick.get_axis(4)
+        ry = self.joystick.get_axis(2)
         
         # LT/RT: Z轴平移
-        lt = (self.joystick.get_axis(2) + 1) / 2
-        rt = (self.joystick.get_axis(5) + 1) / 2
+        lt = (self.joystick.get_axis(5) + 1) / 2
+        rt = (self.joystick.get_axis(4) + 1) / 2
         
         # LB/RB: 控制关节6
-        lb = self.joystick.get_button(4)
-        rb = self.joystick.get_button(5)
+        lb = self.joystick.get_button(6)
+        rb = self.joystick.get_button(7)
         
         # A按钮: 夹爪开合
         grip_button = self.joystick.get_button(0)
@@ -205,7 +205,7 @@ class PiperController:
         dy = ly * self.pos_scale if self.is_moving(ly) else 0.0
         
         trigger_diff = rt - lt
-        dz = trigger_diff * self.pos_scale if abs(trigger_diff) > self.dead_zone else 0.0
+        dz = (trigger_diff * self.pos_scale) if (abs(trigger_diff) > self.dead_zone) else 0.0
         
         # 计算关节角度增量
         joint5_delta = 0.0
@@ -271,9 +271,9 @@ class PiperController:
                     if grip_toggle:
                         self.is_grasp = not self.is_grasp
                         if self.is_grasp:
-                            self.piper_real.GripperCtrl(0 * 1000, 1000, 0x01, 0)
+                            self.piper_real.GripperCtrl(0 * 1000, 5000, 0x01, 0)
                         else:
-                            self.piper_real.GripperCtrl(5000 * 1000, 1000, 0x01, 0)
+                            self.piper_real.GripperCtrl(5000 * 1000, 5000, 0x01, 0)
                 
                     # 使用逆运动学计算
                     try:
@@ -330,7 +330,7 @@ class PiperController:
     def enable_realtime(self):
         """使能实时控制"""
         self.piper_real.ConnectPort()
-        self.piper_real.GripperCtrl(0, 1000, 0x00, 0)
+        self.piper_real.GripperCtrl(0, 5000, 0x00, 0)
         time.sleep(1.5)
         enable_fun(self.piper_real)
 
@@ -338,7 +338,7 @@ class PiperController:
         """将关节恢复到初始位置"""
         console.print("[yellow]恢复到初始位置...[/yellow]")
         self.move_joint_real([0] * 6)
-        self.piper_real.GripperCtrl(0, 1000, 0x01, 0)
+        self.piper_real.GripperCtrl(0, 5000, 0x01, 0)
         console.print("[green]已恢复到初始位置。[/green]")
 
     def move_joint_real(self, target_joints):
@@ -400,9 +400,9 @@ class PiperController:
                     if grip_toggle:
                         self.is_grasp = not self.is_grasp
                         if self.is_grasp:
-                            self.piper_real.GripperCtrl(0 * 1000, 100, 0x01, 0)
+                            self.piper_real.GripperCtrl(0 * 1000, 3000, 0x01, 0)
                         else:
-                            self.piper_real.GripperCtrl(5000 * 1000, 1000, 0x01, 0)
+                            self.piper_real.GripperCtrl(5000 * 1000, 3000, 0x01, 0)
                 
                     # 使用逆运动学计算
                     try:

@@ -110,15 +110,15 @@ class GamepadController:
         ly = -self.joystick.get_axis(0)  # 左右
         
         # 右摇杆: 关节5控制
-        ry = self.joystick.get_axis(4)
+        ry = self.joystick.get_axis(3)
         
         # LT/RT: Z轴平移
-        lt = (self.joystick.get_axis(2) + 1) / 2
-        rt = (self.joystick.get_axis(5) + 1) / 2
+        lt = (self.joystick.get_axis(5) + 1) / 2
+        rt = (self.joystick.get_axis(4) + 1) / 2
         
         # LB/RB: 控制关节6
-        lb = self.joystick.get_button(4)
-        rb = self.joystick.get_button(5)
+        lb = self.joystick.get_button(6)
+        rb = self.joystick.get_button(7)
         
         # A按钮: 夹爪开合
         grip_button = self.joystick.get_button(0)

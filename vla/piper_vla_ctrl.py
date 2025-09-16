@@ -29,7 +29,7 @@ class PiperVlaController(PiperBaseController):
     def __init__(self):
         super().__init__()
         # realsense cameras manager
-        # 保存上一次action chunk的最后一个动作
+        # save the last action of the action chunk
         self.last_action = None
 
     def build_obs_dict(self) -> dict:
@@ -151,10 +151,10 @@ class RTCController:
                 if not self.running:
                     break
 
-                # 已执行的动作数量 s
+                # number of executed actions s
                 s = self.t
 
-                # 读取剩余动作（如果有）
+                # read remaining actions (if any)
                 A_prev = np.zeros((self.H, 8), dtype=np.float32)
                 if self.A_cur is not None and s < len(self.A_cur):
                     remaining = self.A_cur[s:]
@@ -162,12 +162,12 @@ class RTCController:
                     if n_remain > 0:
                         A_prev[:n_remain] = remaining
 
-                # 当前观测以及延迟估计
+                # current observation and delay estimation
                 o = self.o_cur
                 d = max(self.delay_buffer) if len(self.delay_buffer) > 0 else 0
                 d = 4
 
-                # 2) 锁外进行推理，避免阻塞控制线程
+                # 2) inference outside the lock, avoid blocking the control thread
                 A_new = self._guided_inference(o, A_prev, d, s)
 
                 self.A_cur = A_new
@@ -200,24 +200,21 @@ class RTCController:
                 return np.zeros((self.H, 8), dtype=np.float32)
 
 class ActionPlotter:
-    """实时绘制和保存机器人关节角度的类"""
+    """Plotter for robot joint actions"""
     
     def __init__(self, max_history_length: int = 1000):
         self.action_history = []
         self.max_history_length = max_history_length
         self.joint_names = ['Joint 1', 'Joint 2', 'Joint 3', 'Joint 4', 'Joint 5', 'Joint 6', 'Gripper1', 'Gripper2']
         self.update_counter = 0
-        self.update_interval = 10  # 每10次更新一次图表，减少频率
+        self.update_interval = 10 
         
-        # 创建图表，使用Agg后端不会显示窗口
         self.fig, self.axes = plt.subplots(2, 4, figsize=(16, 8))
         self.axes = self.axes.flatten()
         
-        # 初始化每个子图
         self.lines = []
-        self.future_lines = []  # 未来动作虚线
-        self.last_future_actions = None  # 保存最近一次非 None 的 future
-        # 保存所有 future action 段 (start_idx, ndarray[steps,8])
+        self.future_lines = [] 
+        self.last_future_actions = None 
         self.future_segments: list[tuple[int, np.ndarray]] = []
         for i in range(8):
             self.axes[i].set_title(f'{self.joint_names[i]}')
@@ -232,51 +229,44 @@ class ActionPlotter:
         plt.tight_layout()
     
     def add_action(self, action: np.ndarray, future_actions: Optional[np.ndarray] = None):
-        """添加一个动作到历史记录并更新图表，同时可选地记录未来动作段。"""
-        # 1. 追加当前执行动作到历史
+        """Add an action to the history and update the plots, optionally recording future action segments."""
         self.action_history.append(action.copy())
 
-        # 2. 若有新的 future_actions，则存储其段信息，便于后续累计绘制
         if future_actions is not None and len(future_actions) > 0:
-            start_idx = len(self.action_history)  # 当前 step 之后即为 future 起点
+            start_idx = len(self.action_history) 
             self.future_segments.append((start_idx, future_actions.copy()))
         
-        # 限制历史记录长度
         if len(self.action_history) > self.max_history_length:
             self.action_history.pop(0)
         
-        # 降低更新频率，减少计算负担
         self.update_counter += 1
         if self.update_counter % self.update_interval == 0:
             self._update_plots()
     
     def _update_plots(self):
-        """更新所有子图"""
+        """Update all subplots"""
         if len(self.action_history) < 2:
             return
             
         time_steps = list(range(len(self.action_history)))
-        # 计算 future_lines 需要的聚合长度
         total_future_len = sum(seg[1].shape[0] for seg in self.future_segments)
         
         try:
             for i in range(8):
                 joint_values = [act[i] for act in self.action_history]
                 self.lines[i].set_data(time_steps, joint_values)
-                # 聚合所有历史 future 段为连续折线（用 NaN 分割可断开虚线）
                 if self.future_segments:
                     xs: list[int|float] = []
                     ys: list[float] = []
                     for start_idx, fut in self.future_segments:
                         xs.extend(range(start_idx, start_idx + fut.shape[0]))
                         ys.extend([fut[j, i] for j in range(fut.shape[0])])
-                        xs.append(np.nan)  # 分割不同段
+                        xs.append(np.nan) 
                         ys.append(np.nan)
                     self.future_lines[i].set_data(xs, ys)
                 else:
                     self.future_lines[i].set_data([], [])
                 
-                # 自动调整y轴范围（考虑未来动作范围）
                 combined_vals = joint_values.copy()
                 for _, fut in self.future_segments:
                     combined_vals.extend([fut[j, i] for j in range(fut.shape[0])])
@@ -288,7 +278,6 @@ class ActionPlotter:
                     else:
                         self.axes[i].set_ylim(y_min - 0.5, y_max + 0.5)
 
-                # 调整x轴范围应始终执行
                 max_x_local = len(self.action_history)
                 if self.future_segments:
                     max_future_x = max(start + fut.shape[0] for start, fut in self.future_segments)
@@ -302,11 +291,10 @@ class ActionPlotter:
 
 
         except Exception as e:
-            # 静默处理绘图错误
             pass
     
     def save_plots(self, save_dir: str = "action_plots"):
-        """保存图表到文件"""
+        """Save plots to file"""
         try:
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
@@ -341,20 +329,19 @@ def main(chunk_size: int = 50, use_rtc: bool = False, execution_range: int = 25,
         prefix_attention_schedule: schedule for prefix attention weights ("linear", "exp", "ones", "zeros")
         max_guidance_weight: maximum guidance weight clipping value
     """
-    # 设置信号处理
+    # set signal handler
     global should_exit
     should_exit = False
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # vla client
+    # vla client policy
     client = websocket_client_policy.WebsocketClientPolicy(host="127.0.0.1", port=8123)
     piper_vla_controller = PiperVlaController()
 
-    # warm up
+    # warm up the robot
     time.sleep(2)
-    
-    # 初始化动作绘图器
+
     action_plotter = ActionPlotter()
     time_start = time.time()
     try:
@@ -404,7 +391,7 @@ def main(chunk_size: int = 50, use_rtc: bool = False, execution_range: int = 25,
                     piper_vla_controller.update_last_action(action)
                 piper_vla_controller.update_state()
                 # Control loop frequency
-                time.sleep(0.02)
+                time.sleep(0.03)
                 # Check if we should reset to initial positions
                 time_now = time.time()
                 current_positions = piper_vla_controller.piper_real.GetArmJointMsgs()

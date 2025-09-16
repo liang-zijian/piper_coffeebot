@@ -128,8 +128,8 @@ class PiperRealDataRecorder:
             # 相机配置
             camera_configs = {
                 "ee_cam": {"width": 640, "height": 480, "fps": 30, "serial": "317222073629"},
-                "rgb_rs_0": {"width": 640, "height": 480, "fps": 30, "serial": "153122078525"},
-                "rgb_rs_1": {"width": 640, "height": 480, "fps": 30, "serial": "310222078614"}
+                "rgb_rs_0": {"width": 640, "height": 480, "fps": 30, "serial": "213622070741"},
+                "rgb_rs_1": {"width": 640, "height": 480, "fps": 30, "serial": "152122075567"}
             }
             
             self.camera_manager = MultiRealSenseManager(camera_configs)

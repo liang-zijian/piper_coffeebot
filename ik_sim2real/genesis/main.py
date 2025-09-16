@@ -43,9 +43,10 @@ def main():
         # Demo sequence: move to different target positions
         demo_sequence = [
             {"pos": [0.06, 0.002, 0.25], "quat": [0.707, 0, 0.707, 0], "grasp": False, "duration": 6},
-            {"pos": [0.2, 0.002, 0.20], "quat": [0.707, 0, 0.707, 0], "grasp": False, "duration": 6},
-            {"pos": [0.2, 0.1, 0.20], "quat": [0.707, 0, 0.707, 0], "grasp": False, "duration": 6},
-            {"pos": [0.2, -0.1, 0.20], "quat": [0.707, 0, 0.707, 0], "grasp": False, "duration": 30},
+            # {"pos": [0.2, 0.002, 0.20], "quat": [0.707, 0, 0.707, 0], "grasp": False, "duration": 6},
+            # {"pos": [0.2, 0.1, 0.20], "quat": [0.707, 0, 0.707, 0], "grasp": False, "duration": 6},
+            {"pos": [0.32304699588668623, -0.05111836931472475, 0.19899168059757344], "quat": [0.707, 0, 0.707, 0], "grasp": False, "duration": 30},
+            # {"pos": [0.2, -0.1, 0.20], "quat": [0.707, 0, 0.707, 0], "grasp": False, "duration": 30},
         ]
         
         console.print("[green]Starting demo sequence...[/green]")
